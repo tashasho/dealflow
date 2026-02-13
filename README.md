@@ -33,6 +33,50 @@ HF       Clay
 arXiv
 ```
 
+## Sourcing — 5 Data Channels
+
+### 🐙 GitHub Trending (`-s github`)
+Scrapes [GitHub Trending](https://github.com/trending) for repos matching enterprise AI keywords, then enriches each with API data.
+
+- **Keywords tracked**: `enterprise`, `saas`, `b2b`, `workflow`, `automation`, `compliance`, `security`, `rag`, `agent`, `llm`, `fine-tun`, `mlops`, `data-pipeline`, `vector`, `embedding`
+- **Enterprise signals detected in README**: SAML, SSO, SOC2, RBAC, on-premise, audit log, role-based
+- **Metrics collected**: star count, 7-day star velocity, contributor count, open issues
+- **Filter**: repos must match ≥1 keyword AND have enterprise signal or >100 stars
+
+### 🚀 Product Hunt (`-s product_hunt`)
+Queries the [Product Hunt GraphQL API](https://api.producthunt.com/v2/api/graphql) for recent B2B AI launches.
+
+- **Search terms**: `AI B2B`, `enterprise AI`, `AI workflow`, `AI automation`, `AI security`, `AI compliance`
+- **Filter**: minimum 10 upvotes + description must contain AI/ML keywords
+- **Data extracted**: product name, tagline, website, maker info, upvote count
+
+### 🟠 Y Combinator (`-s yc`)
+Fetches the latest [YC company directory](https://www.ycombinator.com/companies) and filters for AI + B2B startups.
+
+- **Filter criteria**: company must be tagged with both AI-related AND B2B/enterprise verticals
+- **Live probe**: checks each company's website for live product signals (pricing pages, demo CTAs, login portals)
+- **Data extracted**: company name, one-liner, batch, website, team size
+
+### 🤗 HuggingFace (`-s huggingface`)
+Monitors [HuggingFace](https://huggingface.co) for organizations publishing high-traction models and enterprise-focused datasets.
+
+- **Model tracking**: organizations with trending models sorted by download count
+- **Enterprise dataset keywords**: `enterprise`, `business`, `finance`, `legal`, `medical`, `compliance`, `security`
+- **Filter**: organizations with >10K model downloads or enterprise-tagged datasets
+- **Data extracted**: org name, top model names, download counts, dataset descriptions
+
+### 📄 arXiv Research (`-s arxiv`)
+Searches the [arXiv API](https://arxiv.org/help/api) for enterprise AI research papers — useful for spotting founders-in-waiting.
+
+- **Research topics monitored**:
+  - Enterprise RAG architectures (retrieval augmented generation)
+  - Agentic workflow orchestration (multi-agent systems, tool use)
+  - Privacy-preserving ML (federated learning, differential privacy)
+  - Enterprise AI deployment and production systems
+- **Tracked labs**: Stanford HAI, MIT CSAIL, CMU, UC Berkeley, Google Research, DeepMind, Meta FAIR, OpenAI, Anthropic, Microsoft Research
+- **Enterprise filter**: papers must contain ≥2 enterprise signals (e.g., "production", "deployment", "compliance", "scalab")
+- **Data extracted**: paper title, abstract, author list with affiliations, arXiv categories
+
 ## Scoring Rubric (0-100)
 
 | Dimension | Max | What It Measures |
