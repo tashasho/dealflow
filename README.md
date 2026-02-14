@@ -27,15 +27,54 @@ This system is a **comprehensive Python-based deal flow pipeline** that automate
 The system runs as a modular Python application (`dealflow`), orchestrating the following workflow:
 
 ```mermaid
-graph TD
-    A["Sourcing (10+ Channels)"] -->|Raw Deals| B(Deduplication)
-    B --> C(Enrichment)
-    C -->|Website + Funding Data| D{"AI Scoring"}
-    D -->|Score < 75| E[Archive]
-    D -->|Score >= 75| F["Slack Triage"]
-    F -->|Reaction: 📧| G["Outreach Queue"]
-    F -->|Reaction: 📚| H["Reading List"]
-    F -->|Reaction: 👎| I["Pass Log"]
+graph LR
+    subgraph Sourcing ["Phase 1: Multi-Channel Sourcing"]
+        direction TB
+        LIn[LinkedIn Sales Nav]
+        GH[GitHub Trending]
+        X[Twitter/X Launch]
+        PH[Product Hunt]
+        HN[Hacker News]
+        R[Reddit]
+        RSS[News/Blogs]
+    end
+
+    subgraph Processing ["Phase 2 & 3: Enrichment & Scoring"]
+        direction TB
+        Dedup(Deduplication)
+        Enrich(Enrichment: Website + Funding)
+        Score{Gemini AI Scoring}
+    end
+
+    subgraph Triage ["Phase 5: Slack Triage (Human Loop)"]
+        Slack[#deal-flow-hot]
+        Research[#deal-flow-research]
+    end
+
+    subgraph Actions ["Phase 6: Automated Actions"]
+        Outreach[Draft Email & Queue]
+        Read[Add to Reading List]
+        Pass[Log Rejection Reason]
+    end
+
+    %% Flows
+    LIn & GH & X & PH & HN & R & RSS --> Dedup
+    Dedup --> Enrich
+    Enrich --> Score
+
+    %% Scoring Logic
+    Score -->|Score < 60| Archive((Archive))
+    Score -->|Score 60-74| Research
+    Score -->|Score >= 75| Slack
+
+    %% Slack Interactions
+    Slack -- "Reaction: 📧" --> Outreach
+    Slack -- "Reaction: 📚" --> Read
+    Slack -- "Reaction: 👎" --> Pass
+    
+    style Score fill:#f96,stroke:#333,stroke-width:2px
+    style Slack fill:#bbf,stroke:#333,stroke-width:2px
+    style Outreach fill:#bfb,stroke:#333,stroke-width:2px
 ```
 
 **Tech Stack**:
