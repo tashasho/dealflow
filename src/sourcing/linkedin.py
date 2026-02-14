@@ -76,6 +76,11 @@ class LinkedInScraper:
                 return []
 
             deals = []
+            
+            # The prompt defines 6 specific searches. 
+            # In a real implementation with Phantombuster, we would likely have 6 different Agent IDs or a single agent running multiple stored searches.
+            # Here we simulate fetching from the "LinkedIn_Raw" master output which aggregates them.
+            
             for item in results:
                 # Map Phantombuster LinkedIn result to Deal model
                 # This mapping depends heavily on the specific Phantom used (e.g. "LinkedIn Search Export")
@@ -97,20 +102,26 @@ class LinkedInScraper:
                         background=item.get("jobTitle") or item.get("title")
                     ))
                 
+                # Determine specific source detail (e.g. "Search 1: Top-Tier Tech")
+                # This would typically come from the input configuration or a tag in the result
+                source_detail = item.get("query") # Hypothetical field
+                
                 deal = Deal(
                     startup_name=name,
-                    source=DealSource.MANUAL, # Mapping to closest existing source or add new
+                    source=DealSource.LINKEDIN,
                     source_url=item.get("profileUrl") or item.get("url"),
                     desc=item.get("jobTitle") or "",
                     founders=founders,
-                    discovered_at=datetime.utcnow()
+                    discovered_at=datetime.utcnow(),
+                    # Store raw data for debugging/enrichment
+                    raw_json=str(item) 
                 )
                 deals.append(deal)
 
             return deals
 
 
-async def source_linkedin() -> list[Deal]:
+async def source_linkedin(limit: int = 20) -> list[Deal]:
     """Main entry point for LinkedIn sourcing."""
     scraper = LinkedInScraper()
     return await scraper.launch_and_fetch()

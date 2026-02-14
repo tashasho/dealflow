@@ -80,7 +80,8 @@ You MUST respond with ONLY a valid JSON object in this exact format (no markdown
   "total_score": <int 0-100>,
   "summary": "<one-line summary of what this startup does>",
   "strengths": ["<strength 1>", "<strength 2>"],
-  "red_flags": ["<red flag 1>"]
+  "red_flags": ["<red flag 1>"],
+  "confidence": "high|medium|low"
 }}
 """
 

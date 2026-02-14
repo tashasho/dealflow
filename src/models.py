@@ -81,6 +81,18 @@ class Deal(BaseModel):
     source: DealSource = DealSource.MANUAL
     source_url: Optional[str] = None
     discovered_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Enrichment Fields
+    funding_raised: Optional[float] = None  # in USD
+    funding_stage: Optional[str] = None
+    employee_count: Optional[str] = None
+    hq_location: Optional[str] = None
+    
+    # Triage Fields
+    triage_status: str = "New" # "New", "Interesting", "Pass", "Reach Out"
+    triaged_by: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    slack_ts: Optional[str] = None # Slack message timestamp for threading
 
 
 class ScoreBreakdown(BaseModel):

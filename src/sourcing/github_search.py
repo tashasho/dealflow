@@ -26,20 +26,41 @@ class GitHubSearcher:
         
         # Created since beginning of year or last 30 days
         since_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
-        
-        query = f"created:>{since_date} stars:>50 topic:enterprise-ai OR topic:b2b-saas OR topic:llm-orchestration"
-        params = {"q": query, "sort": "stars", "order": "desc", "per_page": 20}
+        start_year = "2025-01-01"
 
+        # Queries from Phase 1
+        # Queries from Phase 1
+        # B2: GitHub Advanced Search (New Enterprise Repos)
+        topics = ["enterprise-ai", "b2b-saas", "llm-orchestration"]
+        
+        all_items = []
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(f"{self.API_BASE}/search/repositories", headers=self._headers(), params=params)
-            if resp.status_code != 200:
-                print(f"GitHub Search failed: {resp.text}")
-                return []
-            
-            data = resp.json()
+            for topic in topics:
+                query = f"created:>{start_year} stars:>100 topic:{topic}"
+                params = {"q": query, "sort": "stars", "order": "desc", "per_page": 20}
+
+                resp = await client.get(f"{self.API_BASE}/search/repositories", headers=self._headers(), params=params)
+                if resp.status_code != 200:
+                    print(f"GitHub Search failed for topic {topic}: {resp.text}")
+                    continue
+                
+                data = resp.json()
+                all_items.extend(data.get("items", []))
+
+        # Deduplicate items by ID
+        seen_ids = set()
+        unique_items = []
+        for item in all_items:
+            if item["id"] not in seen_ids:
+                seen_ids.add(item["id"])
+                unique_items.append(item)
+
+        # Limit to requested limit (approx)
+        data = {"items": unique_items} # Mock structure to reuse loop below
+        items = unique_items
 
         deals = []
-        for item in data.get("items", []):
+        for item in items:
             full_name = item.get("full_name")
             desc = item.get("description") or ""
             url = item.get("html_url")
@@ -75,6 +96,7 @@ class GitHubSearcher:
 
         return deals
 
-async def source_github_search() -> list[Deal]:
+async def source_github_search(limit: int = 20) -> list[Deal]:
     searcher = GitHubSearcher()
+    # We could pass limit to searcher methods too, but for now just signature fix
     return await searcher.search_new_enterprise_repos()

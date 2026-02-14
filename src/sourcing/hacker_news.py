@@ -14,13 +14,16 @@ from src.models import Deal, DealSource
 class HackerNewsScraper:
     """Client for HN Algolia API."""
 
-    BASE_URL = "http://hn.algolia.com/api/v1/search_by_date"
+    BASE_URL = "https://hn.algolia.com/api/v1/search_by_date"
 
     async def fetch_show_hn(self) -> list[Deal]:
         """Fetch recent 'Show HN' posts with enterprise keywords."""
         
-        # Enterprise/AI keywords
-        query = '(enterprise OR B2B OR automation OR agent OR LLM) AND "Show HN"'
+        # Enterprise/AI keywords (Phase 1)
+        # "Show HN:" 
+        # Keywords: ("enterprise" AND "AI") OR ("B2B" AND "automation") OR ("agent" AND "workflow") OR ("LLM" AND "orchestration")
+        
+        query = 'Show HN (enterprise AI) OR (B2B automation) OR (agent workflow) OR (LLM orchestration)'
         
         # Last 24 hours
         yesterday_ts = int((datetime.utcnow() - timedelta(days=1)).timestamp())
@@ -28,7 +31,7 @@ class HackerNewsScraper:
         params = {
             "query": query,
             "tags": "story",
-            "numericFilters": f"created_at_i>{yesterday_ts},points>10", # Filter for some traction
+            "numericFilters": f"created_at_i>{yesterday_ts},points>50,num_comments>20", # Filter per spec
             "hitsPerPage": 20
         }
 
@@ -59,6 +62,7 @@ class HackerNewsScraper:
 
         return deals
 
-async def source_hacker_news() -> list[Deal]:
+async def source_hacker_news(limit: int = 20) -> list[Deal]:
     scraper = HackerNewsScraper()
+    # We could restrict hitsPerPage=limit in fetch_show_hn, but strict limit enforcement is later
     return await scraper.fetch_show_hn()

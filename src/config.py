@@ -18,6 +18,8 @@ class Config:
     # --- Required ---
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     SLACK_WEBHOOK_URL: str = os.getenv("SLACK_WEBHOOK_URL", "")
+    SLACK_BOT_TOKEN: str = os.getenv("SLACK_BOT_TOKEN", "")
+    SLACK_SIGNING_SECRET: str = os.getenv("SLACK_SIGNING_SECRET", "")
 
     # --- Optional ---
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")

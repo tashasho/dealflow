@@ -73,16 +73,23 @@ class TwitterScraper:
 
         return deals
 
-async def source_twitter() -> list[Deal]:
+async def source_twitter(limit: int = 20) -> list[Deal]:
     """Scrape Twitter for launch announcements and stealth founders."""
     scraper = TwitterScraper()
     
-    # Queries from the user request
+    # Specific queries from Phase 1
     queries = [
-        '"excited to announce" (AI OR agent OR LLM OR "enterprise automation" OR B2B) -filter:retweets',
-        '"we\'re launching" (AI OR agent OR LLM) -filter:retweets',
-        '"coming out of stealth" (AI OR B2B) -filter:retweets',
-        '("accepted to YC" OR "joined Y Combinator") -filter:retweets'
+        # C1: Launch Announcements
+        '("excited to announce" OR "we\'re building" OR "we\'re launching" OR "just launched") (AI OR agent OR LLM OR "enterprise automation" OR "B2B") -filter:retweets min_faves:50',
+        
+        # C2: YC/Accelerator
+        '("accepted to YC" OR "joined Y Combinator" OR "starting at YC" OR "Techstars") since:2025-01-01 min_faves:20 -filter:retweets',
+        
+        # C3: Stealth
+        '("coming out of stealth" OR "excited to share what we\'ve been building") (AI OR enterprise OR B2B OR SaaS) since:2025-01-01 min_faves:30 -filter:retweets',
+        
+        # C4: Founder Bio Search (simulated via search, ideally bio search feature)
+        'bio:"Founder" (bio:"ex-Stripe" OR bio:"ex-OpenAI" OR bio:"ex-Google" OR bio:"ex-Anthropic") (bio:"stealth" OR bio:"building")'
     ]
     
     return await scraper.run_search(queries)

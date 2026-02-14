@@ -25,23 +25,32 @@ class RedditScraper:
             return []
 
         deals = []
-        # Monitoring these subreddits
+        # Monitoring these subreddits (Phase 1)
         subreddits = [
-            "MachineLearning",
-            "LocalLLaMA",
-            "SaaS",
-            "startups",
-            "ArtificialIntelligence",
-            "LangChain"
+            "MachineLearning", "LocalLLaMA", "SaaS", "startups", 
+            "ArtificialIntelligence", "LangChain"
         ]
 
-        # Searching for "launch" type keywords
-        searches = ["we built", "show off", "just launched", "feedback"]
+        # Search patterns
+        # "we built" OR "show off" OR "feedback on our" OR "just launched"
+        # We'll need to construct this into what the actor expects. 
+        # Assuming the actor takes a list of startUrls or a search query + subreddits.
+        # If using 'trudax/reddit-scraper-lite', it typically takes `startUrls`.
+        
+        start_urls = []
+        bases = [
+            "search/?q=we+built&restrict_sr=1&t=week&sort=top",
+            "search/?q=show+off&restrict_sr=1&t=week&sort=top",
+            "search/?q=just+launched&restrict_sr=1&t=week&sort=top",
+            "search/?q=feedback+on+our&restrict_sr=1&t=week&sort=top"
+        ]
+        
+        for sub in subreddits:
+            for base in bases:
+                start_urls.append({"url": f"https://www.reddit.com/r/{sub}/{base}"})
 
         run_input = {
-            "searches": searches,
-            "subreddits": subreddits,
-            "sort": "new",
+            "startUrls": start_urls,
             "maxItems": 30,
             "debug": False
         }
@@ -73,6 +82,7 @@ class RedditScraper:
 
         return deals
 
-async def source_reddit() -> list[Deal]:
+async def source_reddit(limit: int = 20) -> list[Deal]:
     scraper = RedditScraper()
+    # Could pass limit to scraper.run_search(limit)
     return await scraper.run_search()

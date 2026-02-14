@@ -67,6 +67,7 @@ class RSSScraper:
 
         return deals
 
-async def source_rss() -> list[Deal]:
+async def source_rss(limit: int = 20) -> list[Deal]:
     scraper = RSSScraper()
+    # We could restrict results to limit in fetch_feeds
     return await scraper.fetch_feeds()

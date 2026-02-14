@@ -1,134 +1,150 @@
-# 🎯 DealFlow — Enterprise AI Deal Sourcing Pipeline
+# 🎯 Enterprise AI Deal Flow System
 
-Automated pipeline that sources, scores, and surfaces seed-stage enterprise AI startups.
+Automated pipeline that sources, scores, and surfaces seed-stage enterprise AI startups from 10+ channels.
 
-## Quick Start
+## 🚀 Quick Start
 
+### 1. Install
 ```bash
-# 1. Install
+# Clone the repo
+git clone <your-repo-url>
 cd dealflow
+
+# Install dependencies (requires Python 3.9+)
 pip install -e ".[dev]"
+```
 
-# 2. Configure
+### 2. Configure
+Create a `.env` file in the root directory:
+```bash
 cp .env.example .env
-# Edit .env with your GEMINI_API_KEY and SLACK_WEBHOOK_URL
+```
+Edit `.env` with your API keys:
+```env
+# Required
+GEMINI_API_KEY=...          # Google Gemini API Key for scoring
+SLACK_WEBHOOK_URL=...       # Slack Webhook for notifications
 
-# 3. Run
-dealflow run --dry-run          # Test without Slack
-dealflow score --url https://example-startup.ai   # Score one startup
-dealflow digest --dry-run       # Weekly summary preview
-dealflow list --min-score 75    # View stored deals
+# Slack Triage Server (Recommended)
+SLACK_BOT_TOKEN=xoxb-...    # Bot User OAuth Token
+SLACK_SIGNING_SECRET=...    # App Signing Secret
+
+# Sourcing APIs (Optional but recommended)
+GITHUB_TOKEN=...            # Higher rate limits for GitHub
+APIFY_TOKEN=...             # Product Hunt, Reddit, Twitter
+PHANTOMBUSTER_API_KEY=...   # LinkedIn
+PHANTOMBUSTER_AGENT_ID=...  # LinkedIn Agent ID
 ```
 
-## Architecture
-
-```
-Source → Enrich → Score → Filter → Notify → Store
-  │        │        │        │        │        │
-  ▼        ▼        ▼        ▼        ▼        ▼
-GitHub   Website  Gemini   ≥75pts   Slack    SQLite
-PH       GitHub   0-100    Auto     Card
-YC       Apollo/          Pass
-HF       Clay
-arXiv
-```
-
-## Sourcing — 5 Data Channels
-
-### 🐙 GitHub Trending (`-s github`)
-Scrapes [GitHub Trending](https://github.com/trending) for repos matching enterprise AI keywords, then enriches each with API data.
-
-- **Keywords tracked**: `enterprise`, `saas`, `b2b`, `workflow`, `automation`, `compliance`, `security`, `rag`, `agent`, `llm`, `fine-tun`, `mlops`, `data-pipeline`, `vector`, `embedding`
-- **Enterprise signals detected in README**: SAML, SSO, SOC2, RBAC, on-premise, audit log, role-based
-- **Metrics collected**: star count, 7-day star velocity, contributor count, open issues
-- **Filter**: repos must match ≥1 keyword AND have enterprise signal or >100 stars
-
-### 🚀 Product Hunt (`-s product_hunt`)
-Queries the [Product Hunt GraphQL API](https://api.producthunt.com/v2/api/graphql) for recent B2B AI launches.
-
-- **Search terms**: `AI B2B`, `enterprise AI`, `AI workflow`, `AI automation`, `AI security`, `AI compliance`
-- **Filter**: minimum 10 upvotes + description must contain AI/ML keywords
-- **Data extracted**: product name, tagline, website, maker info, upvote count
-
-### 🟠 Y Combinator (`-s yc`)
-Fetches the latest [YC company directory](https://www.ycombinator.com/companies) and filters for AI + B2B startups.
-
-- **Filter criteria**: company must be tagged with both AI-related AND B2B/enterprise verticals
-- **Live probe**: checks each company's website for live product signals (pricing pages, demo CTAs, login portals)
-- **Data extracted**: company name, one-liner, batch, website, team size
-
-### 🤗 HuggingFace (`-s huggingface`)
-Monitors [HuggingFace](https://huggingface.co) for organizations publishing high-traction models and enterprise-focused datasets.
-
-- **Model tracking**: organizations with trending models sorted by download count
-- **Enterprise dataset keywords**: `enterprise`, `business`, `finance`, `legal`, `medical`, `compliance`, `security`
-- **Filter**: organizations with >10K model downloads or enterprise-tagged datasets
-- **Data extracted**: org name, top model names, download counts, dataset descriptions
-
-### 📄 arXiv Research (`-s arxiv`)
-Searches the [arXiv API](https://arxiv.org/help/api) for enterprise AI research papers — useful for spotting founders-in-waiting.
-
-- **Research topics monitored**:
-  - Enterprise RAG architectures (retrieval augmented generation)
-  - Agentic workflow orchestration (multi-agent systems, tool use)
-  - Privacy-preserving ML (federated learning, differential privacy)
-  - Enterprise AI deployment and production systems
-- **Tracked labs**: Stanford HAI, MIT CSAIL, CMU, UC Berkeley, Google Research, DeepMind, Meta FAIR, OpenAI, Anthropic, Microsoft Research
-- **Enterprise filter**: papers must contain ≥2 enterprise signals (e.g., "production", "deployment", "compliance", "scalab")
-- **Data extracted**: paper title, abstract, author list with affiliations, arXiv categories
-
-## Scoring Rubric (0-100)
-
-| Dimension | Max | What It Measures |
-|-----------|-----|-----------------|
-| Problem Severity | 30 | Mission-critical vs nice-to-have |
-| Differentiation | 25 | Proprietary tech vs GPT wrapper |
-| Team | 25 | PhDs, exits, OSS cred |
-| Market Readiness | 20 | Live product vs concept stage |
-
-## CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `dealflow run` | Full pipeline (all sources) |
-| `dealflow run -s github` | Single source |
-| `dealflow run -s arxiv` | arXiv papers only |
-| `dealflow run --dry-run` | Score without Slack |
-| `dealflow score --url URL` | Score one startup |
-| `dealflow digest` | Weekly summary to Slack |
-| `dealflow list -m 80` | View deals ≥80 |
-| `dealflow schedule` | Start auto-scheduler (Ctrl+C to stop) |
-| `dealflow schedule -i 12` | Scan every 12 hours |
-| `dealflow crontab` | Generate crontab entries |
-| `dealflow crontab --launchd` | Generate macOS launchd plist |
-
-## Configuration (.env)
-
-```
-GEMINI_API_KEY=...          # Required
-SLACK_WEBHOOK_URL=...       # Required (or use --dry-run)
-GITHUB_TOKEN=...            # Optional (higher rate limits)
-SCORE_THRESHOLD=75          # Auto-pass cutoff
-APOLLO_API_KEY=...          # Optional (founder enrichment)
-CLAY_API_KEY=...            # Optional (fallback enrichment)
-```
-
-## Scheduling
-
+### 3. Run
 ```bash
-# Option 1: Built-in scheduler (foreground process)
-dealflow schedule --interval 6 --dry-run
+# Test the pipeline without posting to Slack
+dealflow run --dry-run
 
-# Option 2: System crontab
-dealflow crontab              # prints crontab entries
-crontab -e                     # paste the output
+# Run full pipeline
+dealflow run
 
-# Option 3: macOS launchd
-dealflow crontab --launchd     # prints plist XML
+# Run specific source
+dealflow run -s github -s arxiv
 ```
 
-## Tests
+---
 
+## 🏗 Architecture
+
+```mermaid
+graph LR
+    A[Sources] --> B(Enrichment)
+    B --> C{AI Scoring}
+    C -->|Score < 75| D[Trash]
+    C -->|Score >= 75| E[Slack Triage]
+    E --> F[Airtable/CRM]
+```
+
+**Pipeline Steps:**
+1.  **Source**: Aggregates leads from GitHub, Product Hunt, YC, HuggingFace, arXiv, LinkedIn, Twitter, Reddit, Hacker News, RSS.
+2.  **Deduplicate**: Merges duplicate startups based on name and URL.
+3.  **Enrich**: Adds data from Website (Jina AI), GitHub Metrics, Crunchbase (Funding Check), Apollo (Founders).
+4.  **Score**: Uses **Google Gemini 2.0 Flash** to score deals 0-100 based on a VC Analyst rubric.
+5.  **Filter**: Discards deals with score < 75 or funding > $5M.
+6.  **Notify**: Posts "High Signal" deals to Slack with interactive triage buttons.
+7.  **Store**: Saves all data to SQLite (`data/deals.db`) and syncs high-priority deals to Airtable.
+
+---
+
+## 📡 Sourcing Channels
+
+| Source | Description | Key Filters |
+|--------|-------------|-------------|
+| **GitHub** | Trending & Search | `enterprise`, `b2b`, `agent`, >100 stars, recent creation |
+| **Product Hunt** | Daily Launches | `B2B`, `AI`, `automation`, `workflow`, >10 upvotes |
+| **Y Combinator** | Company Directory | Tagged `AI` AND `B2B/Enterprise`, Live Product Check |
+| **HuggingFace** | Models & Datasets | High-download models (>10k), Enterprise datasets |
+| **arXiv** | Research Papers | Enterprise signals in Abstract, Top Labs (DeepMind, FAIR) mult-agent |
+| **LinkedIn** | Search Export | "Founder" + "Stealth" + "ex-OpenAI/Stripe" (via Phantombuster) |
+| **Twitter/X** | Launch Tweets | "launching", "joined YC", "stealth" (via Apify) |
+| **Reddit** | Subreddits | `r/LocalLLaMA`, `r/MachineLearning` ("we built" posts) |
+| **Hacker News** | Show HN | Enterprise/B2B keywords, >50 points |
+| **RSS** | Tech News | Funding news, newsletters (Inc42, YourStory) |
+
+---
+
+## 🧠 AI Scoring Rubric
+
+Deals are scored 0-100 by Gemini based on:
+
+1.  **Problem Severity (30pts)**: Is this a "hair-on-fire" enterprise problem?
+2.  **Differentiation (25pts)**: Novel tech/approach vs. thin GPT wrapper.
+3.  **Team (25pts)**: Founder pedigree (PhD, Ex-FAANG, OSS contributions).
+4.  **Market Readiness (20pts)**: Live product, traction, or strong pull.
+
+**Thresholds:**
+-   **High Priority (🔥)**: Score ≥ 85
+-   **Worth Watching (📌)**: Score 75-84
+-   **Pass (🗑️)**: Score < 75
+
+---
+
+## 🚨 Slack Triage Server
+
+The system runs a **FastAPI server** to handle interactive buttons in Slack.
+
+### Features
+-   **Add to Pipeline**: Moves deal to "Reach Out" status.
+-   **Pass**: Prompt for rejection reason (e.g., "Too early", "Competitive").
+-   **Research**: Adds to reading list.
+
+### Running the Server
+1.  Expose the server to the internet (e.g., `ngrok http 3000`).
+2.  Configure Slack App **Interactivity** and **Event Subscriptions** to your URL.
+3.  Start server:
+    ```bash
+    python -m src.server
+    ```
+
+---
+
+## 🛠 CLI Reference
+
+| Command | Usage |
+|---------|-------|
+| `run` | `dealflow run [--source github] [--dry-run]` |
+| `score` | `dealflow score --url <url>` |
+| `digest` | `dealflow digest` (Weekly Summary) |
+| `list` | `dealflow list --min-score 80` |
+| `schedule` | `dealflow schedule --interval 6` |
+| `crontab` | `dealflow crontab --launchd` |
+
+---
+
+## 🧪 Testing
+
+Run user verification:
 ```bash
-pytest tests/ -v
+dealflow run --source github_search --dry-run
+```
+
+Run unit tests:
+```bash
+pytest tests/
 ```

@@ -13,8 +13,11 @@ class ArxivScraper:
     """Client for arXiv API."""
 
     def fetch_papers(self) -> list[Deal]:
-        # Search for Enterprise AI / Agents in CS categories
-        query = '(ti:enterprise OR ti:agent OR ti:workflow OR ti:"large language model") AND (cat:cs.AI OR cat:cs.CL OR cat:cs.LG)'
+        # Search for Enterprise AI / Agents in CS categories (Phase 1)
+        # Categories: cs.AI, cs.CL, cs.LG
+        # Keywords: "enterprise RAG", "agentic workflows", "production LLM"
+        
+        query = '(cat:cs.AI OR cat:cs.CL OR cat:cs.LG) AND ("enterprise RAG" OR "agentic workflows" OR "production LLM")'
         
         search = arxiv.Search(
             query=query,

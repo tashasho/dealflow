@@ -29,7 +29,7 @@ class ProductHuntScraper:
             # Run actor for "today"
             run_input = {
                 "maxItems": 20,
-                "category": "tech", # Filter usually happens in post-processing
+                "category": "tech",
             }
             
             run = await self.client.actor(self.ACTOR_ID).call(run_input=run_input)
@@ -37,10 +37,18 @@ class ProductHuntScraper:
 
             async for item in dataset.iterate_items():
                 topics = item.get("topics", [])
+                description = (item.get("description", "") + " " + item.get("tagline", "")).lower()
                 
-                # Filter for B2B/AI
-                relevant_topics = ["Artificial Intelligence", "B2B", "Developer Tools", "SaaS", "Productivity"]
-                if not any(t in relevant_topics for t in topics):
+                # Filter D: B2B/AI + Keywords
+                # "enterprise" OR "B2B" OR "teams" OR "automation" OR "agent" OR "workflow"
+                keywords = ["enterprise", "b2b", "teams", "automation", "agent", "workflow"]
+                if not any(k in description for k in keywords):
+                    continue
+
+                # Exclude wrappers checking logic usually goes here or in scoring
+                
+                # Upvote velocity check (simulated by total votes for now)
+                if item.get("votesCount", 0) < 80:
                     continue
 
                 deal = Deal(
@@ -59,6 +67,6 @@ class ProductHuntScraper:
 
         return deals
 
-async def source_product_hunt() -> list[Deal]:
+async def source_product_hunt(limit: int = 20) -> list[Deal]:
     scraper = ProductHuntScraper()
     return await scraper.get_todays_launches()

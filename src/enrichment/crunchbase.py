@@ -102,6 +102,16 @@ class CrunchbaseEnricher:
             except Exception as e:
                 print(f"Crunchbase enrichment failed for {domain}: {e}")
 
+        # Check funding < $5M (Phase 3 Requirement)
+        if deal.funding_raised and deal.funding_raised > 5_000_000:
+             # Tag as low priority or just mark it
+             # The system specs say "Filter by funding". 
+             # We will handle the actual filtering (excluding from list) in the pipeline 
+             # or by setting a flag. 
+             # Let's add a "pass" reason directly?
+             deal.triage_status = "Pass"
+             deal.rejection_reason = "Raised > $5M"
+
         return deal
 
 async def enrich_crunchbase(deal: Deal) -> Deal:
