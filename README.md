@@ -27,7 +27,6 @@ This system is a **comprehensive Python-based deal flow pipeline** that automate
 The system runs as a modular Python application (`dealflow`), orchestrating the following workflow:
 
 ```mermaid
-```mermaid
 graph TD
     subgraph Sources [Phase 1: Sourcing]
         LIn(LinkedIn Sales Nav)
