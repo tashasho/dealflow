@@ -20,8 +20,12 @@ class RSSScraper:
         "https://entrackr.com/feed/",
         
         # AI Newsletters (if they have RSS, otherwise need specialized scraper)
+        # AI Newsletters
         "https://www.bensbites.co/feed",
-        # Add more valid RSS feeds here
+        "https://tldr.tech/ai/feed",
+        "https://read.deeplearning.ai/the-batch/feed.xml",
+        "https://jack-clark.net/feed/", # Import AI
+        "https://aibreakfast.beehiiv.com/feed",
     ]
 
     async def fetch_feeds(self) -> list[Deal]:

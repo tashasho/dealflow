@@ -16,37 +16,41 @@ from src.models import Deal, DealPriority, ScoreBreakdown, ScoredDeal
 # The scoring prompt — maps exactly to the user's scorecard rubric
 # ---------------------------------------------------------------------------
 
-SCORECARD_PROMPT = """You are an expert VC analyst at an early-stage micro-fund that writes seed checks of $500K–$2M into enterprise AI startups.
+SCORECARD_PROMPT = """You are a seed-stage VC analyst evaluating Enterprise AI startups. Score 0-100.
 
-IMPORTANT CONTEXT:
-- We invest at PRE-SEED and SEED stage — we are looking for EARLY startups, not established companies.
-- We want to find founders building enterprise AI before they raise Series A.
-- High GitHub stars + strong technical founders = strong signal, even without revenue.
-- We value: scrappy teams, novel technical approaches, PhD/ex-FAANG founders, OSS traction.
-- We do NOT penalize for: lack of SOC2, no pricing page, pre-revenue, small team size.
-- Large established companies (OpenAI, Meta, Google) are NOT investable — score them LOW.
+IMPORTANT: Be CRITICAL. Average startups should score 50-70. Only exceptional opportunities score >85.
 
-Analyze this startup and score it 0-100 based on the following rubric:
+Analyze this startup based on the following weighted rubric:
 
-1. Problem Severity (30 pts)
-   - 25-30: Mission-critical enterprise pain (compliance, security, revenue ops, data infra)
-   - 15-24: High-value efficiency (reducing manual work in core workflows)
-   - 0-14: Nice-to-have, consumer-focused, or unclear enterprise ROI
+1. PROBLEM SEVERITY (30 points)
+   - 25-30: Mission-critical (compliance, security, fraud prevention, revenue operations). Ex: SOC2 automation.
+   - 18-24: High-value efficiency (10x faster workflows, >$100k/year savings). Ex: Automated code review.
+   - 10-17: Moderate pain point (2-5x improvement, nice-to-have).
+   - 0-9: Unclear problem OR consumer-focused.
 
-2. Differentiation (25 pts)
-   - 20-25: Proprietary models/data, unique technical approach, novel research
-   - 10-19: Novel application but relies on off-the-shelf models with smart integration
-   - 0-9: Thin wrapper around GPT/Claude with no defensibility
+2. DIFFERENTIATION (25 points)
+   - 20-25: Proprietary data/models, unique workflow IP, deep vertical integration.
+   - 13-19: Novel application with defensibility (network effects, switching costs).
+   - 6-12: Better UX/execution on existing solution.
+   - 0-5: Obvious ChatGPT/Claude wrapper, no moat.
 
-3. Team (25 pts)
-   - 20-25: Technical founders with PhD, exits, major OSS contributions, or ex-FAANG
-   - 10-19: Strong IC experience at good companies, or active OSS contributors
-   - 0-9: No technical depth, no domain expertise, or this is a large corporation (not investable)
+3. TEAM (25 points)
+   - 20-25: PhD + domain expertise OR previous successful exit OR 10+ years in target vertical. Ex: Ex-FAANG Staff+.
+   - 13-19: Strong senior IC at top companies (5-10 years relevant experience).
+   - 6-12: Solid background but first-time founders, junior (<5 years).
+   - 0-5: No relevant experience visible, career switchers without domain knowledge.
 
-4. Market Readiness (20 pts)
-   - 15-20: Live product/beta with users, GitHub traction, or "book demo" CTA
-   - 8-14: Working prototype, waitlist, early community
-   - 0-7: Concept stage only — BUT don't over-penalize seed-stage startups for this
+4. MARKET READINESS (20 points)
+   - 16-20: Live product, paying customers, SOC2 started, "Book Demo" CTA.
+   - 10-15: Beta with users, testimonials, "Join Beta" or "Request Access".
+   - 4-9: Landing page only, "Join Waitlist", vague positioning.
+   - 0-3: Blog/concept only, no product.
+
+PENALTIES (Deduct from total score):
+- Geographic arbitrage without technical depth: -10
+- Buzzword-heavy without substance: -5
+- Consumer pivot disguised as enterprise: -15
+- No clear ICP (Ideal Customer Profile): -5
 
 --- STARTUP DATA ---
 
@@ -65,24 +69,18 @@ Website Signals:
 
 --- END DATA ---
 
-SCORING GUIDELINES:
-- If this is a LARGE CORPORATION (OpenAI, Meta, Google, HuggingFace org), score VERY LOW (0-20) — we can't invest in them.
-- If this is an early-stage startup with strong technical signal, score GENEROUSLY (50-80+).
-- A pre-revenue startup with great founders and novel tech should score 60-75.
-- Only score 80+ if everything aligns: great team + novel tech + clear enterprise pain + early traction.
-
-You MUST respond with ONLY a valid JSON object in this exact format (no markdown, no extra text):
-{{
+You MUST respond with ONLY a valid JSON object in this exact format (no markdown):
+{
   "problem_severity": <int 0-30>,
   "differentiation": <int 0-25>,
   "team": <int 0-25>,
   "market_readiness": <int 0-20>,
   "total_score": <int 0-100>,
-  "summary": "<one-line summary of what this startup does>",
+  "summary": "<one concise sentence: what they do + for whom>",
   "strengths": ["<strength 1>", "<strength 2>"],
   "red_flags": ["<red flag 1>"],
   "confidence": "high|medium|low"
-}}
+}
 """
 
 

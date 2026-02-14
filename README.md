@@ -1,150 +1,216 @@
-# 🎯 Enterprise AI Deal Flow System
+# **Enterprise AI Seed Deal Sourcing: Complete Automated System**
 
-Automated pipeline that sources, scores, and surfaces seed-stage enterprise AI startups from 10+ channels.
+**Runtime**: Daily at 7:00 AM PT  
+**Geography**: Full US + India coverage  
+**Output**: 10-20 high-quality deals/day via Slack  
+**Interface**: 100% Slack-native (mobile-optimized)
 
-## 🚀 Quick Start
-
-### 1. Install
-```bash
-# Clone the repo
-git clone <your-repo-url>
-cd dealflow
-
-# Install dependencies (requires Python 3.9+)
-pip install -e ".[dev]"
-```
-
-### 2. Configure
-Create a `.env` file in the root directory:
-```bash
-cp .env.example .env
-```
-Edit `.env` with your API keys:
-```env
-# Required
-GEMINI_API_KEY=...          # Google Gemini API Key for scoring
-SLACK_WEBHOOK_URL=...       # Slack Webhook for notifications
-
-# Slack Triage Server (Recommended)
-SLACK_BOT_TOKEN=xoxb-...    # Bot User OAuth Token
-SLACK_SIGNING_SECRET=...    # App Signing Secret
-
-# Sourcing APIs (Optional but recommended)
-GITHUB_TOKEN=...            # Higher rate limits for GitHub
-APIFY_TOKEN=...             # Product Hunt, Reddit, Twitter
-PHANTOMBUSTER_API_KEY=...   # LinkedIn
-PHANTOMBUSTER_AGENT_ID=...  # LinkedIn Agent ID
-```
-
-### 3. Run
-```bash
-# Test the pipeline without posting to Slack
-dealflow run --dry-run
-
-# Run full pipeline
-dealflow run
-
-# Run specific source
-dealflow run -s github -s arxiv
-```
+This system is a **comprehensive Python-based deal flow pipeline** that automates sourcing, enrichment, scoring, and triage of early-stage enterprise AI startups.
 
 ---
 
-## 🏗 Architecture
+## **Table of Contents**
+
+1. [System Architecture](#system-architecture)
+2. [Phase 1: Multi-Channel Sourcing](#phase-1-sourcing)
+3. [Phase 2: Enrichment Pipeline](#phase-2-enrichment)
+4. [Phase 3: AI Scoring (Gemini 2.0)](#phase-3-ai-scoring)
+5. [Phase 4: Slack Distribution](#phase-4-slack-distribution)
+6. [Phase 5: Slack-Native Triage](#phase-5-triage)
+7. [Phase 6: Outreach Automation](#phase-6-outreach)
+8. [Setup Guide](#setup-guide)
+
+---
+
+## **System Architecture**
+
+The system runs as a modular Python application (`dealflow`), orchestrating the following workflow:
 
 ```mermaid
-graph LR
-    A[Sources] --> B(Enrichment)
-    B --> C{AI Scoring}
-    C -->|Score < 75| D[Trash]
-    C -->|Score >= 75| E[Slack Triage]
-    E --> F[Airtable/CRM]
+graph TD
+    A[Sourcing (10+ Channels)] -->|Raw Deals| B(Deduplication)
+    B --> C(Enrichment)
+    C -->|Website + Funding Data| D{AI Scoring}
+    D -->|Score < 75| E[Archive]
+    D -->|Score >= 75| F[Slack Triage]
+    F -->|Reaction: 📧| G[Outreach Queue]
+    F -->|Reaction: 📚| H[Reading List]
+    F -->|Reaction: 👎| I[Pass Log]
 ```
 
-**Pipeline Steps:**
-1.  **Source**: Aggregates leads from GitHub, Product Hunt, YC, HuggingFace, arXiv, LinkedIn, Twitter, Reddit, Hacker News, RSS.
-2.  **Deduplicate**: Merges duplicate startups based on name and URL.
-3.  **Enrich**: Adds data from Website (Jina AI), GitHub Metrics, Crunchbase (Funding Check), Apollo (Founders).
-4.  **Score**: Uses **Google Gemini 2.0 Flash** to score deals 0-100 based on a VC Analyst rubric.
-5.  **Filter**: Discards deals with score < 75 or funding > $5M.
-6.  **Notify**: Posts "High Signal" deals to Slack with interactive triage buttons.
-7.  **Store**: Saves all data to SQLite (`data/deals.db`) and syncs high-priority deals to Airtable.
+**Tech Stack**:
+-   **Core**: Python 3.9+, FastAPI (Server), Click (CLI)
+-   **AI**: Google Gemini 2.0 Flash (Scoring & Email Gen)
+-   **Data**: SQLite (Local DB), Airtable (Sync)
+-   **Scrapers**: Apify (Twitter/Reddit/PH), Phantombuster (LinkedIn), Algolia (HN)
 
 ---
 
-## 📡 Sourcing Channels
+## **Phase 1: Multi-Channel Sourcing**
 
-| Source | Description | Key Filters |
-|--------|-------------|-------------|
-| **GitHub** | Trending & Search | `enterprise`, `b2b`, `agent`, >100 stars, recent creation |
-| **Product Hunt** | Daily Launches | `B2B`, `AI`, `automation`, `workflow`, >10 upvotes |
-| **Y Combinator** | Company Directory | Tagged `AI` AND `B2B/Enterprise`, Live Product Check |
-| **HuggingFace** | Models & Datasets | High-download models (>10k), Enterprise datasets |
-| **arXiv** | Research Papers | Enterprise signals in Abstract, Top Labs (DeepMind, FAIR) mult-agent |
-| **LinkedIn** | Search Export | "Founder" + "Stealth" + "ex-OpenAI/Stripe" (via Phantombuster) |
-| **Twitter/X** | Launch Tweets | "launching", "joined YC", "stealth" (via Apify) |
-| **Reddit** | Subreddits | `r/LocalLLaMA`, `r/MachineLearning` ("we built" posts) |
-| **Hacker News** | Show HN | Enterprise/B2B keywords, >50 points |
-| **RSS** | Tech News | Funding news, newsletters (Inc42, YourStory) |
+The pipeline aggregates leads from 10+ high-signal channels (`src/sourcing/`).
 
----
+### **A. LinkedIn Sales Navigator** (`-s linkedin`)
+*Powered by Phantombuster*
+-   **Target**: Founders coming out of stealth or leaving top AI labs.
+-   **Queries**:
+    1.  **Top-Tier Tech**: Ex-OpenAI/Google/Stripe + "Founder" + "Stealth"
+    2.  **India Tech**: Ex-Zepto/Cred/Razorpay + "Founder" + "Building"
+    3.  **Academic**: Stanford/IIT grads + "Co-Founder" + "AI/ML"
 
-## 🧠 AI Scoring Rubric
+### **B. GitHub** (`-s github`, `-s github_search`)
+*Powered by GitHub API*
+-   **Trending**: Repos growing >500 stars/week.
+-   **New Enterprise Repos**: `topic:enterprise-ai`, `topic:b2b-saas`, `topic:llm-orchestration`.
+-   **Signals**: READMEs containing "SOC2", "SAML", "On-prem".
 
-Deals are scored 0-100 by Gemini based on:
+### **C. Twitter/X** (`-s twitter`)
+*Powered by Apify*
+-   **Launch**: "excited to announce" + "AI/Agent/Enterprise".
+-   **Signal**: "joined YC", "coming out of stealth".
+-   **Filters**: Min 20-50 faves depending on query type.
 
-1.  **Problem Severity (30pts)**: Is this a "hair-on-fire" enterprise problem?
-2.  **Differentiation (25pts)**: Novel tech/approach vs. thin GPT wrapper.
-3.  **Team (25pts)**: Founder pedigree (PhD, Ex-FAANG, OSS contributions).
-4.  **Market Readiness (20pts)**: Live product, traction, or strong pull.
+### **D. Product Hunt** (`-s product_hunt`)
+*Powered by Apify*
+-   **Filters**: B2B/AI category, >10 upvotes in first few hours.
+-   **Keywords**: "automation", "workflow", "agent", "enterprise".
 
-**Thresholds:**
--   **High Priority (🔥)**: Score ≥ 85
--   **Worth Watching (📌)**: Score 75-84
--   **Pass (🗑️)**: Score < 75
+### **E. Hacker News** (`-s hacker_news`)
+*Powered by Algolia API*
+-   **Show HN**: Posts with "enterprise", "B2B", "LLM" in title.
+-   **Validation**: Score > 50 points or > 20 comments.
 
----
+### **F. Reddit** (`-s reddit`)
+*Powered by Apify*
+-   **Subreddits**: `r/MachineLearning`, `r/LocalLLaMA`, `r/SaaS`.
+-   **Pattern**: "we built", "just launched", "feedback on".
 
-## 🚨 Slack Triage Server
-
-The system runs a **FastAPI server** to handle interactive buttons in Slack.
-
-### Features
--   **Add to Pipeline**: Moves deal to "Reach Out" status.
--   **Pass**: Prompt for rejection reason (e.g., "Too early", "Competitive").
--   **Research**: Adds to reading list.
-
-### Running the Server
-1.  Expose the server to the internet (e.g., `ngrok http 3000`).
-2.  Configure Slack App **Interactivity** and **Event Subscriptions** to your URL.
-3.  Start server:
-    ```bash
-    python -m src.server
-    ```
+### **G. Research / YC / News** (`-s arxiv`, `-s yc`, `-s rss`)
+-   **Academic**: Papers from DeepMind/FAIR/Stanford on "Enterprise RAG", "Agentic Workflows".
+-   **YC**: Batch directory filtered for "AI" + "B2B".
+-   **RSS**: Inc42, YourStory, TLDR AI, The Batch, Ben's Bites.
 
 ---
 
-## 🛠 CLI Reference
+## **Phase 2: Enrichment Pipeline**
 
-| Command | Usage |
-|---------|-------|
-| `run` | `dealflow run [--source github] [--dry-run]` |
-| `score` | `dealflow score --url <url>` |
-| `digest` | `dealflow digest` (Weekly Summary) |
-| `list` | `dealflow list --min-score 80` |
-| `schedule` | `dealflow schedule --interval 6` |
-| `crontab` | `dealflow crontab --launchd` |
+Before scoring, deals are enriched to provide the AI with full context:
+1.  **Website Parsing** (Jina AI): Extracts pricing, standard features, SOC2 compliance.
+2.  **Crunchbase** (API): **CRITICAL FILTER** - If funding > $5M, the deal is auto-rejected (too late).
+3.  **Founders** (Apollo/Hunter): Enriches founder profiles with past companies and emails.
+4.  **GitHub Metrics**: Adds star velocity and issue counts for technical projects.
 
 ---
 
-## 🧪 Testing
+## **Phase 3: AI Scoring (Gemini 2.0)**
 
-Run user verification:
+Deals are scored **0-100** using a specialized VC Analyst rubric (`src/scoring/scorer.py`).
+
+**Rubric Dimensions:**
+1.  **Problem Severity (30pts)**: Mission-critical vs. nice-to-have.
+2.  **Differentiation (25pts)**: Proprietary IP vs. GPT wrapper.
+3.  **Team (25pts)**: Founder pedigree (PhD, Ex-FAANG, Exits).
+4.  **Market Readiness (20pts)**: Live product/traction vs. concept.
+
+**Penalties**:
+-   Geographic arbitrage without tech depth (-10)
+-   Buzzword soup (-5)
+-   Consumer pivot disguised as enterprise (-15)
+
+**Thresholds**:
+-   🔥 **High Priority (≥85)**: Immediate triage.
+-   📌 **Watch (75-84)**: Good but maybe early/niche.
+-   🗑️ **Pass (<75)**: Archived.
+
+---
+
+## **Phase 4: Slack Distribution**
+
+The pipeline posts high-signal deals to Slack formatted for rapid decision making.
+
+**Channel Structure**:
+-   `#deal-flow-hot`: Score ≥ 75 (10-15 deals/day)
+-   `#deal-flow-research`: Score 60-74 (Batch review)
+
+**Message Content**:
+-   **Header**: Startup Name + Score
+-   **Facts**: Founder background, Funding stage, HQ.
+-   **AI Analysis**: 3 key strengths, 1-2 red flags.
+-   **Actions**: Interactive Triage Buttons.
+
+---
+
+## **Phase 5: Slack-Native Triage**
+
+We run a **FastAPI Webhook Server** (`src/server.py`) to handle interactivity.
+
+**Workflow**:
+1.  **Interesting?** React with 📚.
+    -   *Action*: Adds to **Reading List** in Airtable.
+    -   *Bot*: "Added to reading list. (Total: 12 items)"
+2.  **Pass?** React with 👎.
+    -   *Action*: Bot posts ephemeral buttons: "Why?" (Wrapper, Too Early, No Moat).
+    -   *Click*: Updates Airtable with reason.
+3.  **Reach Out?** React with 📧.
+    -   *Action*: AI generates a personalized cold email draft based on the analysis.
+    -   *Bot*: Posts draft to thread with "Send Now" button.
+
+---
+
+## **Phase 6: Outreach Automation**
+
+If you click "Send Now" or "Queue":
+1.  **Drafting**: AI references specific "strengths" from the scorecard to personalize the intro.
+2.  **Sending**: Uses Gmail API to send from your account.
+3.  **Tracking**: Logs to `Outreach` table in Airtable.
+4.  **Follow-up**: Auto-reminds you in Slack if no reply in 5 days.
+
+---
+
+## **Setup Guide**
+
+### **1. Installation**
 ```bash
-dealflow run --source github_search --dry-run
+git clone https://github.com/tashasho/dealflow.git
+cd dealflow
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Run unit tests:
+### **2. Configuration (.env)**
+```env
+# Core
+GEMINI_API_KEY=...
+SLACK_WEBHOOK_URL=...
+
+# Triage Server
+SLACK_BOT_TOKEN=...
+SLACK_SIGNING_SECRET=...
+
+# Sourcing
+GITHUB_TOKEN=...
+APIFY_TOKEN=...
+PHANTOMBUSTER_API_KEY=...
+```
+
+### **3. Run Triage Server**
+Expose port 3000 (ugrok) and run:
 ```bash
-pytest tests/
+python -m src.server
+```
+
+### **4. Run Pipeline**
+```bash
+# Full daily run
+python -m src.cli run
+
+# Test specific source
+python -m src.cli run --source github_search --dry-run
+```
+
+### **5. Scheduling**
+Automate with cron (runs every 6 hours):
+```bash
+python -m src.cli crontab
 ```
