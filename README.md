@@ -28,51 +28,55 @@ The system runs as a modular Python application (`dealflow`), orchestrating the 
 
 ```mermaid
 graph TD
-    subgraph Sources [Phase 1: Sourcing]
-        LIn(LinkedIn Sales Nav)
-        GH(GitHub Trending)
-        X(Twitter/X Launch)
-        PH(Product Hunt)
-        HN(Hacker News)
-        R(Reddit)
-        RSS(News/Blogs)
+    %% Phase 1: Sourcing
+    subgraph Sourcing [Phase 1: Sourcing]
+        direction TB
+        S1[LinkedIn Sales Nav]
+        S2[GitHub Trending]
+        S3[Twitter / X]
+        S4[Product Hunt]
+        S5[Hacker News]
+        S6[Reddit / RSS]
     end
 
-    subgraph Process [Phase 2-3: Processing]
-        Dedup{Deduplication}
-        Enrich(Enrichment: Funding+Stack)
-        Score{Gemini AI Scoring}
+    %% Phase 2: Processing
+    subgraph Processing [Phase 2: Enrichment]
+        D[Deduplication]
+        E[Enrichment]
+        S{AI Scoring}
     end
 
-    subgraph Slack [Phase 5: Slack Triage]
+    %% Phase 3: Triage
+    subgraph Triage [Phase 5: Slack]
         Hot[#deal-flow-hot]
-        Research[#deal-flow-research]
+        Res[#deal-flow-research]
     end
 
-    subgraph Ops [Phase 6: Actions]
-        Email[Draft Email]
-        List[Reading List]
-        Pass[Pass Log]
+    %% Phase 4: Actions
+    subgraph Actions [Phase 6: Automated]
+        Mail[Draft Email]
+        List[Read List]
+        Log[Pass Log]
     end
 
-    %% Flow
-    LIn & GH & X & PH & HN & R & RSS --> Dedup
-    Dedup --> Enrich
-    Enrich --> Score
+    %% Connections
+    S1 & S2 & S3 & S4 & S5 & S6 --> D
+    D --> E --> S
 
-    %% Logic
-    Score -->|Score < 60| Archive((Archive))
-    Score -->|Score 60-74| Research
-    Score -->|Score >= 75| Hot
+    %% Scoring Splits
+    S -->|Low Score| Arch(Archive)
+    S -->|Mid Score| Res
+    S -->|High Score| Hot
 
-    %% Actions
-    Hot -- "📧 Reach Out" --> Email
-    Hot -- "📚 Read Later" --> List
-    Hot -- "👎 Pass" --> Pass
+    %% Slack Buttons
+    Hot -.->|📧 Reach Out| Mail
+    Hot -.->|📚 Read Later| List
+    Hot -.->|👎 Pass| Log
 
-    style Score fill:#f96,stroke:#333
-    style Hot fill:#bbf,stroke:#333
-    style Email fill:#bfb,stroke:#333
+    %% Styling
+    style S fill:#ff9900,stroke:#333,stroke-width:2px,color:black
+    style Hot fill:#00ccff,stroke:#333,stroke-width:2px,color:black
+    style Mail fill:#66ff66,stroke:#333,stroke-width:2px,color:black
 ```
 
 **Tech Stack**:
