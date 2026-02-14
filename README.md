@@ -28,14 +28,14 @@ The system runs as a modular Python application (`dealflow`), orchestrating the 
 
 ```mermaid
 graph TD
-    A[Sourcing (10+ Channels)] -->|Raw Deals| B(Deduplication)
+    A["Sourcing (10+ Channels)"] -->|Raw Deals| B(Deduplication)
     B --> C(Enrichment)
-    C -->|Website + Funding Data| D{AI Scoring}
+    C -->|Website + Funding Data| D{"AI Scoring"}
     D -->|Score < 75| E[Archive]
-    D -->|Score >= 75| F[Slack Triage]
-    F -->|Reaction: 📧| G[Outreach Queue]
-    F -->|Reaction: 📚| H[Reading List]
-    F -->|Reaction: 👎| I[Pass Log]
+    D -->|Score >= 75| F["Slack Triage"]
+    F -->|Reaction: 📧| G["Outreach Queue"]
+    F -->|Reaction: 📚| H["Reading List"]
+    F -->|Reaction: 👎| I["Pass Log"]
 ```
 
 **Tech Stack**:
