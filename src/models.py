@@ -19,6 +19,11 @@ class DealSource(str, Enum):
     YC = "yc"
     HUGGINGFACE = "huggingface"
     ARXIV = "arxiv"
+    LINKEDIN = "linkedin"
+    TWITTER = "twitter"
+    HACKER_NEWS = "hacker_news"
+    REDDIT = "reddit"
+    RSS = "rss"
     MANUAL = "manual"
 
 

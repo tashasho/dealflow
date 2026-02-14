@@ -18,7 +18,10 @@ from src.storage.db import DealDatabase
 
 console = Console()
 
-VALID_SOURCES = ["github", "product_hunt", "yc", "huggingface", "arxiv"]
+VALID_SOURCES = [
+    "github", "github_search", "product_hunt", "yc", "huggingface", 
+    "arxiv", "linkedin", "twitter", "hacker_news", "reddit", "rss"
+]
 
 
 @click.group()

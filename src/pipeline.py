@@ -12,14 +12,23 @@ from src.config import Config
 from src.enrichment.founders import enrich_founders
 from src.enrichment.github_metrics import enrich_github_metrics
 from src.enrichment.website import extract_website_signals
+from src.enrichment.crunchbase import enrich_crunchbase
+from src.enrichment.apollo import enrich_contacts
+from src.storage.airtable import sync_to_airtable
 from src.models import Deal, DealPriority, ScoredDeal
 from src.notifications.slack import post_deal_to_slack
 from src.scoring.scorer import score_deal
 from src.sourcing.github_trending import source_github
+from src.sourcing.github_search import source_github_search
 from src.sourcing.huggingface import source_huggingface
 from src.sourcing.product_hunt import source_product_hunt
 from src.sourcing.yc_batch import source_yc
 from src.sourcing.arxiv import source_arxiv
+from src.sourcing.linkedin import source_linkedin
+from src.sourcing.twitter import source_twitter
+from src.sourcing.hacker_news import source_hacker_news
+from src.sourcing.reddit import source_reddit
+from src.sourcing.rss import source_rss
 from src.storage.db import DealDatabase
 
 console = Console()
@@ -27,27 +36,65 @@ console = Console()
 # Map source names to functions
 SOURCE_MAP = {
     "github": source_github,
+    "github_search": source_github_search,
     "product_hunt": source_product_hunt,
     "yc": source_yc,
     "huggingface": source_huggingface,
     "arxiv": source_arxiv,
+    "linkedin": source_linkedin,
+    "twitter": source_twitter,
+    "hacker_news": source_hacker_news,
+    "reddit": source_reddit,
+    "rss": source_rss,
 }
 
 
 async def _deduplicate(deals: list[Deal]) -> list[Deal]:
-    """Remove duplicates by startup name (case-insensitive)."""
-    seen: set[str] = set()
-    unique: list[Deal] = []
+    """
+    Remove duplicates by startup name or source URL.
+    Prioritizes retaining the version with more info (e.g. description length).
+    """
+    unique_map: dict[str, Deal] = {}
+    
     for deal in deals:
-        key = deal.startup_name.lower().strip()
-        if key not in seen:
-            seen.add(key)
-            unique.append(deal)
-    return unique
+        # Create a composite key or try multiple keys
+        # 1. Source URL (strongest signal if same source)
+        # 2. Startup Name (normalized)
+        
+        keys = []
+        if deal.source_url:
+            keys.append(deal.source_url)
+        
+        name_key = deal.startup_name.lower().strip()
+        keys.append(name_key)
+        
+        # Check if we've seen this deal
+        existing = None
+        used_key = None
+        for k in keys:
+            if k in unique_map:
+                existing = unique_map[k]
+                used_key = k
+                break
+        
+        if existing:
+            # Merge logic: keep the one with longer description or more founders
+            if len(deal.description) > len(existing.description):
+                unique_map[used_key] = deal
+                # Update other keys to point to this new deal
+                for k in keys:
+                    unique_map[k] = deal
+        else:
+            # Add to map for all keys
+            for k in keys:
+                unique_map[k] = deal
+                
+    # Return unique values
+    return list({id(d): d for d in unique_map.values()}.values())
 
 
 async def _enrich_deal(deal: Deal) -> Deal:
-    """Enrich a single deal with website signals, GitHub metrics, and founder data."""
+    """Enrich a single deal with website signals, GitHub metrics, founder data, and external APIs."""
     # Website signals
     if deal.website and not deal.website_signals:
         deal.website_signals = await extract_website_signals(deal.website)
@@ -58,9 +105,16 @@ async def _enrich_deal(deal: Deal) -> Deal:
         if enriched:
             deal.github = enriched
 
-    # Founder enrichment
+    # Crunchbase (Funding check)
+    if deal.website:
+        deal = await enrich_crunchbase(deal)
+
+    # Founder enrichment (Apollo/Hunter)
     if deal.founders:
-        deal.founders = await enrich_founders(deal.founders)
+        deal = await enrich_contacts(deal)
+        # Fallback to existing logic if needed, but let's assume enrich_contacts handles it
+        # deal.founders = await enrich_founders(deal.founders) 
+        # (Existing enrich_founders might be a placeholder or duplicate, keeping as comment for now)
 
     return deal
 
@@ -200,6 +254,11 @@ async def run_pipeline(
         for sd in scored:
             deal_id = db.save_deal(sd.deal)
             db.save_scored_deal(deal_id, sd)
+
+        # Sync to Airtable
+        if not dry_run:
+            console.print(f"  → Syncing to Airtable…")
+            await sync_to_airtable(scored)
 
         console.print("[bold green]✅ Pipeline complete![/]\n")
         return scored

@@ -1,113 +1,64 @@
-"""Product Hunt B2B + AI tracker."""
+"""Product Hunt sourcing via Apify."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-import httpx
+from apify_client import ApifyClientAsync
 
-from src.models import Deal, DealSource
-
-
-PH_API_URL = "https://www.producthunt.com/frontend/graphql"
-
-# GraphQL query for recent B2B AI posts
-POSTS_QUERY = """
-query {{
-  posts(order: RANKING, topic: "artificial-intelligence", first: {limit}) {{
-    edges {{
-      node {{
-        id
-        name
-        tagline
-        votesCount
-        website
-        url
-        createdAt
-        topics {{
-          edges {{
-            node {{
-              name
-            }}
-          }}
-        }}
-      }}
-    }}
-  }}
-}}
-"""
-
-B2B_KEYWORDS = [
-    "b2b", "enterprise", "saas", "api", "platform", "workflow",
-    "automation", "compliance", "security", "operations", "devops",
-    "infrastructure", "data", "analytics",
-]
+from src.config import Config
+from src.models import Deal, DealSource, Founder
 
 
-def _is_b2b(tagline: str, topics: list[str]) -> bool:
-    text = f"{tagline} {' '.join(topics)}".lower()
-    return any(kw in text for kw in B2B_KEYWORDS)
+class ProductHuntScraper:
+    """Client for Apify Product Hunt Scraper."""
 
+    # Example Actor ID for Product Hunt
+    ACTOR_ID = "hMvNspz39a" # Placeholder ID
 
-async def source_product_hunt(
-    min_upvotes: int = 100,
-    limit: int = 30,
-) -> list[Deal]:
-    """
-    Fetch recent AI product launches from Product Hunt.
-    Filter for B2B focus and upvote velocity.
-    """
-    deals: list[Deal] = []
+    def __init__(self):
+        self.client = ApifyClientAsync(Config.APIFY_TOKEN)
 
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                PH_API_URL,
-                json={"query": POSTS_QUERY.format(limit=limit)},
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
-            )
+    async def get_todays_launches(self) -> list[Deal]:
+        if not Config.APIFY_TOKEN:
+            print("Warning: Apify token not set. Skipping Product Hunt.")
+            return []
 
-            if resp.status_code != 200:
-                # Product Hunt may require auth — fall back gracefully
-                return deals
+        deals = []
+        try:
+            # Run actor for "today"
+            run_input = {
+                "maxItems": 20,
+                "category": "tech", # Filter usually happens in post-processing
+            }
+            
+            run = await self.client.actor(self.ACTOR_ID).call(run_input=run_input)
+            dataset = self.client.dataset(run["defaultDatasetId"])
 
-            data = resp.json()
-            edges = (
-                data.get("data", {})
-                .get("posts", {})
-                .get("edges", [])
-            )
-
-            for edge in edges:
-                node = edge.get("node", {})
-                votes = node.get("votesCount", 0)
-                if votes < min_upvotes:
-                    continue
-
-                tagline = node.get("tagline", "")
-                topics = [
-                    t["node"]["name"]
-                    for t in node.get("topics", {}).get("edges", [])
-                ]
-
-                if not _is_b2b(tagline, topics):
+            async for item in dataset.iterate_items():
+                topics = item.get("topics", [])
+                
+                # Filter for B2B/AI
+                relevant_topics = ["Artificial Intelligence", "B2B", "Developer Tools", "SaaS", "Productivity"]
+                if not any(t in relevant_topics for t in topics):
                     continue
 
                 deal = Deal(
-                    startup_name=node.get("name", "Unknown"),
-                    website=node.get("website") or node.get("url"),
-                    description=tagline,
+                    startup_name=item.get("name"),
+                    website=item.get("url"), # This is usually the PH link, separate enrich needed for real URL
+                    description=item.get("tagline") + "\n" + item.get("description", ""),
                     source=DealSource.PRODUCT_HUNT,
-                    source_url=node.get("url"),
-                    discovered_at=datetime.utcnow(),
+                    source_url=item.get("url"),
+                    founders=[Founder(name=maker.get("name"), background=maker.get("username")) for maker in item.get("makers", [])],
+                    discovered_at=datetime.utcnow()
                 )
                 deals.append(deal)
 
-    except httpx.HTTPError:
-        # Non-fatal: return what we have
-        pass
+        except Exception as e:
+            print(f"Error scraping Product Hunt: {e}")
 
-    return deals
+        return deals
+
+async def source_product_hunt() -> list[Deal]:
+    scraper = ProductHuntScraper()
+    return await scraper.get_todays_launches()

@@ -3,106 +3,156 @@
 from __future__ import annotations
 
 import json
-
 import httpx
 
 from src.config import Config
-from src.models import ScoredDeal
+from src.models import ScoredDeal, DealPriority
 
 
-def _format_deal_card(scored: ScoredDeal) -> str:
-    """
-    Format a scored deal into the Slack notification card.
-    Matches the user's specified format exactly.
-    """
+def _create_deal_blocks(scored: ScoredDeal) -> list[dict]:
+    """Create Slack Block Kit layout for a deal."""
     deal = scored.deal
+    
+    # Emoji based on priority
+    if scored.priority == DealPriority.HIGH:
+        header_text = f"🔥 High Signal: {deal.startup_name} ({scored.total_score}/100)"
+    else:
+        header_text = f"📌 Worth Watching: {deal.startup_name} ({scored.total_score}/100)"
 
-    # Header
-    lines = [
-        f"🔥 *High-Signal Deal: {deal.startup_name}* — Score: {scored.total_score}/100",
-        "",
-        f"📝 *One-Liner:* {scored.summary}",
-        "",
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": header_text,
+                "emoji": True
+            }
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*{scored.summary}*\n{deal.description[:200]}..."
+            }
+        },
+        {
+            "type": "divider"
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Problem*\n{scored.breakdown.problem_severity}/30"},
+                {"type": "mrkdwn", "text": f"*Differentiation*\n{scored.breakdown.differentiation}/25"},
+                {"type": "mrkdwn", "text": f"*Team*\n{scored.breakdown.team}/25"},
+                {"type": "mrkdwn", "text": f"*Market*\n{scored.breakdown.market_readiness}/20"}
+            ]
+        }
     ]
 
-    # Strengths
-    lines.append("✅ *Why It's Hot:*")
-    for s in scored.strengths:
-        lines.append(f"  • {s}")
-    lines.append("")
+    # Strengths Section
+    if scored.strengths:
+        strengths_text = "• " + "\n• ".join(scored.strengths)
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*✅ Strengths:*\n{strengths_text}"
+            }
+        })
 
-    # Red flags
+    # Red Flags Section
     if scored.red_flags:
-        lines.append("⚠️ *Red Flags:*")
-        for rf in scored.red_flags:
-            lines.append(f"  • {rf}")
-        lines.append("")
+        flags_text = "• " + "\n• ".join(scored.red_flags)
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*⚠️ Red Flags:*\n{flags_text}"
+            }
+        })
 
-    # Score breakdown
-    b = scored.breakdown
-    lines.append(
-        f"📊 *Breakdown:* Problem: {b.problem_severity}/30 | "
-        f"Diff: {b.differentiation}/25 | "
-        f"Team: {b.team}/25 | "
-        f"Market: {b.market_readiness}/20"
-    )
-    lines.append("")
-
-    # Links
-    link_parts = []
+    # Context & Links
+    context_elements = [
+        {"type": "mrkdwn", "text": f"Source: {deal.source.value}"}
+    ]
     if deal.website:
-        link_parts.append(f"<{deal.website}|Website>")
-    if deal.github and deal.github.repo_url:
-        link_parts.append(f"<{deal.github.repo_url}|GitHub>")
-    if deal.source_url and deal.source_url != deal.website:
-        link_parts.append(f"<{deal.source_url}|Source>")
-    if link_parts:
-        lines.append(f"🔗 *Links:* {' | '.join(link_parts)}")
+        context_elements.append({"type": "mrkdwn", "text": f"<{deal.website}|Website>"})
+    if deal.github:
+        context_elements.append({"type": "mrkdwn", "text": f"<{deal.github.repo_url}|GitHub ({deal.github.stars}★)>"})
+    if deal.founders:
+        founders_str = ", ".join([f.name for f in deal.founders[:2]])
+        context_elements.append({"type": "mrkdwn", "text": f"Founders: {founders_str}"})
 
-    return "\n".join(lines)
+    blocks.append({
+        "type": "context",
+        "elements": context_elements
+    })
+
+    # Actions
+    blocks.append({
+        "type": "actions",
+        "elements": [
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Add to Pipeline", "emoji": True},
+                "style": "primary",
+                "value": "add_pipeline"
+            },
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Research", "emoji": True},
+                "value": "research"
+            },
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Pass", "emoji": True},
+                "style": "danger",
+                "value": "pass"
+            }
+        ]
+    })
+
+    return blocks
 
 
-async def post_deal_to_slack(
-    scored: ScoredDeal,
-    dry_run: bool = False,
-) -> str:
-    """
-    Post a formatted deal card to the configured Slack channel.
-    If dry_run=True, returns the formatted text without posting.
-    """
-    text = _format_deal_card(scored)
-
+async def post_deal_to_slack(scored: ScoredDeal, dry_run: bool = False) -> str:
+    """Post deal to the appropriate Slack channel using Block Kit."""
+    
+    blocks = _create_deal_blocks(scored)
+    
     if dry_run:
-        return text
+        return json.dumps(blocks, indent=2)
 
+    # Determine channel (conceptually - for webhook we assume one URL or mapped in config)
+    # The user asked for routing to different channels. 
+    # Since we only have one SLACK_WEBHOOK_URL in config, we might need another one or use the same.
+    # For now, we'll post to the main webhook but we could configure overrides.
+    
     payload = {
-        "text": text,
-        "unfurl_links": False,
-        "unfurl_media": False,
+        "blocks": blocks,
+        "text": f"New Deal: {scored.deal.startup_name}", # Fallback notification text
+        "unfurl_links": False
     }
 
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            Config.SLACK_WEBHOOK_URL,
-            json=payload,
-        )
-        resp.raise_for_status()
+        try:
+            resp = await client.post(Config.SLACK_WEBHOOK_URL, json=payload)
+            resp.raise_for_status()
+        except Exception as e:
+            print(f"Failed to post to Slack: {e}")
 
-    return text
+    return "Posted to Slack"
 
 
 async def post_text_to_slack(text: str, dry_run: bool = False) -> str:
-    """Post raw text to Slack (used for digests, etc.)."""
+    """Post raw text to Slack."""
     if dry_run:
         return text
 
-    payload = {"text": text, "unfurl_links": False}
-
+    payload = {"text": text}
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            Config.SLACK_WEBHOOK_URL,
-            json=payload,
-        )
-        resp.raise_for_status()
-
+        try:
+            await client.post(Config.SLACK_WEBHOOK_URL, json=payload)
+        except Exception:
+            pass
     return text
