@@ -27,54 +27,53 @@ This system is a **comprehensive Python-based deal flow pipeline** that automate
 The system runs as a modular Python application (`dealflow`), orchestrating the following workflow:
 
 ```mermaid
-graph LR
-    subgraph Sourcing ["Phase 1: Multi-Channel Sourcing"]
-        direction TB
-        LIn[LinkedIn Sales Nav]
-        GH[GitHub Trending]
-        X[Twitter/X Launch]
-        PH[Product Hunt]
-        HN[Hacker News]
-        R[Reddit]
-        RSS[News/Blogs]
+```mermaid
+graph TD
+    subgraph Sources [Phase 1: Sourcing]
+        LIn(LinkedIn Sales Nav)
+        GH(GitHub Trending)
+        X(Twitter/X Launch)
+        PH(Product Hunt)
+        HN(Hacker News)
+        R(Reddit)
+        RSS(News/Blogs)
     end
 
-    subgraph Processing ["Phase 2 & 3: Enrichment & Scoring"]
-        direction TB
-        Dedup(Deduplication)
-        Enrich(Enrichment: Website + Funding)
+    subgraph Process [Phase 2-3: Processing]
+        Dedup{Deduplication}
+        Enrich(Enrichment: Funding+Stack)
         Score{Gemini AI Scoring}
     end
 
-    subgraph Triage ["Phase 5: Slack Triage (Human Loop)"]
-        Slack[#deal-flow-hot]
+    subgraph Slack [Phase 5: Slack Triage]
+        Hot[#deal-flow-hot]
         Research[#deal-flow-research]
     end
 
-    subgraph Actions ["Phase 6: Automated Actions"]
-        Outreach[Draft Email & Queue]
-        Read[Add to Reading List]
-        Pass[Log Rejection Reason]
+    subgraph Ops [Phase 6: Actions]
+        Email[Draft Email]
+        List[Reading List]
+        Pass[Pass Log]
     end
 
-    %% Flows
+    %% Flow
     LIn & GH & X & PH & HN & R & RSS --> Dedup
     Dedup --> Enrich
     Enrich --> Score
 
-    %% Scoring Logic
+    %% Logic
     Score -->|Score < 60| Archive((Archive))
     Score -->|Score 60-74| Research
-    Score -->|Score >= 75| Slack
+    Score -->|Score >= 75| Hot
 
-    %% Slack Interactions
-    Slack -- "Reaction: 📧" --> Outreach
-    Slack -- "Reaction: 📚" --> Read
-    Slack -- "Reaction: 👎" --> Pass
-    
-    style Score fill:#f96,stroke:#333,stroke-width:2px
-    style Slack fill:#bbf,stroke:#333,stroke-width:2px
-    style Outreach fill:#bfb,stroke:#333,stroke-width:2px
+    %% Actions
+    Hot -- "📧 Reach Out" --> Email
+    Hot -- "📚 Read Later" --> List
+    Hot -- "👎 Pass" --> Pass
+
+    style Score fill:#f96,stroke:#333
+    style Hot fill:#bbf,stroke:#333
+    style Email fill:#bfb,stroke:#333
 ```
 
 **Tech Stack**:
