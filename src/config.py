@@ -16,9 +16,13 @@ class Config:
     """Central configuration — reads from environment variables."""
 
     # --- Required ---
+    # OpenRouter is the default LLM provider (OpenAI-compatible).
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
+    # GEMINI_API_KEY kept as fallback for older deploys.
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     SLACK_WEBHOOK_URL: str = os.getenv("SLACK_WEBHOOK_URL", "")
     SLACK_BOT_TOKEN: str = os.getenv("SLACK_BOT_TOKEN", "")
+    SLACK_CHANNEL: str = os.getenv("SLACK_CHANNEL", "")
     SLACK_SIGNING_SECRET: str = os.getenv("SLACK_SIGNING_SECRET", "")
 
     # --- Optional ---
@@ -46,17 +50,24 @@ class Config:
     DATA_DIR: Path = _PROJECT_ROOT / "data"
     DB_PATH: Path = DATA_DIR / "deals.db"
 
-    # --- Gemini ---
+    # --- LLM ---
+    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+    # Back-compat with older deploys.
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+    @classmethod
+    def llm_key(cls) -> str:
+        """Return whichever LLM key is configured. Prefers OpenRouter."""
+        return cls.OPENROUTER_API_KEY or cls.GEMINI_API_KEY
 
     @classmethod
     def validate(cls) -> list[str]:
         """Return a list of missing-but-required config keys."""
         missing = []
-        if not cls.GEMINI_API_KEY:
-            missing.append("GEMINI_API_KEY")
-        if not cls.SLACK_WEBHOOK_URL:
-            missing.append("SLACK_WEBHOOK_URL")
+        if not cls.llm_key():
+            missing.append("OPENROUTER_API_KEY")
+        if not cls.SLACK_WEBHOOK_URL and not cls.SLACK_BOT_TOKEN:
+            missing.append("SLACK_WEBHOOK_URL or SLACK_BOT_TOKEN")
         return missing
 
     @classmethod

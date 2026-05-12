@@ -55,8 +55,8 @@ def run(source: tuple[str, ...], dry_run: bool, limit: int):
         console.print("Set them in .env or use --dry-run to test without Slack.")
         raise SystemExit(1)
 
-    if not Config.GEMINI_API_KEY:
-        console.print("[red]❌ GEMINI_API_KEY is required for scoring.[/]")
+    if not Config.llm_key():
+        console.print("[red]❌ OPENROUTER_API_KEY is required for scoring.[/]")
         raise SystemExit(1)
 
     sources = list(source) if source else None
@@ -68,8 +68,8 @@ def run(source: tuple[str, ...], dry_run: bool, limit: int):
 @click.option("--name", "-n", default=None, help="Startup name (auto-detected if omitted).")
 def score(url: str, name: str | None):
     """Score a single startup by its website URL."""
-    if not Config.GEMINI_API_KEY:
-        console.print("[red]❌ GEMINI_API_KEY is required.[/]")
+    if not Config.llm_key():
+        console.print("[red]❌ OPENROUTER_API_KEY is required.[/]")
         raise SystemExit(1)
 
     async def _score():
@@ -193,8 +193,8 @@ def list_deals(min_score: int, days: int):
 )
 def schedule(interval: int, source: tuple[str, ...], dry_run: bool):
     """Start the automated scheduler (runs until Ctrl+C)."""
-    if not Config.GEMINI_API_KEY:
-        console.print("[red]❌ GEMINI_API_KEY is required for scoring.[/]")
+    if not Config.llm_key():
+        console.print("[red]❌ OPENROUTER_API_KEY is required for scoring.[/]")
         raise SystemExit(1)
 
     from src.scheduler import DealFlowScheduler

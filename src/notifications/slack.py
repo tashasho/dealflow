@@ -115,32 +115,45 @@ def _create_deal_blocks(scored: ScoredDeal) -> list[dict]:
     return blocks
 
 
+async def _post(payload: dict) -> None:
+    """Route delivery: bot-token+channel takes priority, webhook is the fallback."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        if Config.SLACK_BOT_TOKEN and Config.SLACK_CHANNEL:
+            resp = await client.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={
+                    "Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}",
+                    "Content-Type": "application/json; charset=utf-8",
+                },
+                json={**payload, "channel": Config.SLACK_CHANNEL},
+            )
+            data = resp.json()
+            if not data.get("ok"):
+                raise RuntimeError(f"Slack chat.postMessage failed: {data.get('error')}")
+            return
+        if Config.SLACK_WEBHOOK_URL:
+            resp = await client.post(Config.SLACK_WEBHOOK_URL, json=payload)
+            resp.raise_for_status()
+            return
+        raise RuntimeError("No Slack destination configured (need SLACK_BOT_TOKEN+SLACK_CHANNEL or SLACK_WEBHOOK_URL)")
+
+
 async def post_deal_to_slack(scored: ScoredDeal, dry_run: bool = False) -> str:
-    """Post deal to the appropriate Slack channel using Block Kit."""
-    
+    """Post deal to the configured Slack channel using Block Kit."""
     blocks = _create_deal_blocks(scored)
-    
+
     if dry_run:
         return json.dumps(blocks, indent=2)
 
-    # Determine channel (conceptually - for webhook we assume one URL or mapped in config)
-    # The user asked for routing to different channels. 
-    # Since we only have one SLACK_WEBHOOK_URL in config, we might need another one or use the same.
-    # For now, we'll post to the main webhook but we could configure overrides.
-    
     payload = {
         "blocks": blocks,
-        "text": f"New Deal: {scored.deal.startup_name}", # Fallback notification text
-        "unfurl_links": False
+        "text": f"New Deal: {scored.deal.startup_name}",
+        "unfurl_links": False,
     }
-
-    async with httpx.AsyncClient(timeout=10) as client:
-        try:
-            resp = await client.post(Config.SLACK_WEBHOOK_URL, json=payload)
-            resp.raise_for_status()
-        except Exception as e:
-            print(f"Failed to post to Slack: {e}")
-
+    try:
+        await _post(payload)
+    except Exception as e:
+        print(f"Failed to post to Slack: {e}")
     return "Posted to Slack"
 
 
@@ -148,11 +161,8 @@ async def post_text_to_slack(text: str, dry_run: bool = False) -> str:
     """Post raw text to Slack."""
     if dry_run:
         return text
-
-    payload = {"text": text}
-    async with httpx.AsyncClient(timeout=10) as client:
-        try:
-            await client.post(Config.SLACK_WEBHOOK_URL, json=payload)
-        except Exception:
-            pass
+    try:
+        await _post({"text": text})
+    except Exception as e:
+        print(f"Failed to post to Slack: {e}")
     return text

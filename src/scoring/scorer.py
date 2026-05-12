@@ -1,4 +1,8 @@
-"""Gemini-powered AI scorecard — the brain of the deal flow system."""
+"""LLM-powered AI scorecard — the brain of the deal flow system.
+
+Uses OpenRouter (OpenAI-compatible) so the same code works with GPT, Claude,
+Gemini, Llama, etc. — model selection is just OPENROUTER_MODEL.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,7 @@ import json
 import re
 from typing import Optional
 
-from google import genai
+from openai import OpenAI
 
 from src.config import Config
 from src.models import Deal, DealPriority, ScoreBreakdown, ScoredDeal
@@ -174,14 +178,21 @@ async def score_deal(deal: Deal) -> ScoredDeal:
         website_signals_text=_format_website_signals(deal),
     )
 
-    client = genai.Client(api_key=Config.GEMINI_API_KEY)
-
-    response = client.models.generate_content(
-        model=Config.GEMINI_MODEL,
-        contents=prompt,
+    client = OpenAI(
+        api_key=Config.OPENROUTER_API_KEY,
+        base_url="https://openrouter.ai/api/v1",
+        default_headers={
+            "HTTP-Referer": "https://github.com/tashasho/dealflow",
+            "X-Title": "dealflow",
+        },
     )
-
-    result = _parse_score_response(response.text)
+    completion = client.chat.completions.create(
+        model=Config.OPENROUTER_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=600,
+    )
+    raw_text = completion.choices[0].message.content or ""
+    result = _parse_score_response(raw_text)
 
     if not result:
         # Fallback: return a low-confidence score
