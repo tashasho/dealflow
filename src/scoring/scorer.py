@@ -74,7 +74,7 @@ Website Signals:
 --- END DATA ---
 
 You MUST respond with ONLY a valid JSON object in this exact format (no markdown):
-{
+{{
   "problem_severity": <int 0-30>,
   "differentiation": <int 0-25>,
   "team": <int 0-25>,
@@ -84,7 +84,7 @@ You MUST respond with ONLY a valid JSON object in this exact format (no markdown
   "strengths": ["<strength 1>", "<strength 2>"],
   "red_flags": ["<red flag 1>"],
   "confidence": "high|medium|low"
-}
+}}
 """
 
 
