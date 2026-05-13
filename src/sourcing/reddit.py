@@ -1,88 +1,63 @@
-"""Reddit sourcing via Apify."""
+"""Reddit sourcing via public JSON endpoints (no API key needed).
+
+Pulls top posts from startup-relevant subreddits over the last week.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from apify_client import ApifyClientAsync
+import httpx
 
-from src.config import Config
-from src.models import Deal, DealSource, Founder
+from src.models import Deal, DealSource
 
 
-class RedditScraper:
-    """Client for Apify Reddit Scraper."""
+SUBREDDITS = [
+    "SideProject",
+    "SaaS",
+    "startups",
+    "EntrepreneurRideAlong",
+    "LocalLLaMA",
+    "MachineLearning",
+    "LangChain",
+    "ArtificialIntelligence",
+]
 
-    # Provide a valid Reddit Scraper Actor ID (e.g., 'trudax/reddit-scraper-lite')
-    ACTOR_ID = "trudax/reddit-scraper-lite" # Example
+UA = "dealflow-bot/1.0 (+https://github.com/tashasho/dealflow)"
 
-    def __init__(self):
-        self.client = ApifyClientAsync(Config.APIFY_TOKEN)
 
-    async def run_search(self) -> list[Deal]:
-        if not Config.APIFY_TOKEN:
-            print("Warning: Apify token not set. Skipping Reddit.")
-            return []
+async def source_reddit(limit: int = 10) -> list[Deal]:
+    deals: list[Deal] = []
+    async with httpx.AsyncClient(
+        timeout=15.0, headers={"User-Agent": UA}, follow_redirects=True
+    ) as client:
+        for sub in SUBREDDITS:
+            url = f"https://www.reddit.com/r/{sub}/top.json?t=week&limit={limit}"
+            try:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                children = resp.json().get("data", {}).get("children", [])
+            except Exception as e:
+                print(f"Reddit r/{sub} failed: {e}")
+                continue
 
-        deals = []
-        # Monitoring these subreddits (Phase 1)
-        subreddits = [
-            "MachineLearning", "LocalLLaMA", "SaaS", "startups", 
-            "ArtificialIntelligence", "LangChain"
-        ]
-
-        # Search patterns
-        # "we built" OR "show off" OR "feedback on our" OR "just launched"
-        # We'll need to construct this into what the actor expects. 
-        # Assuming the actor takes a list of startUrls or a search query + subreddits.
-        # If using 'trudax/reddit-scraper-lite', it typically takes `startUrls`.
-        
-        start_urls = []
-        bases = [
-            "search/?q=we+built&restrict_sr=1&t=week&sort=top",
-            "search/?q=show+off&restrict_sr=1&t=week&sort=top",
-            "search/?q=just+launched&restrict_sr=1&t=week&sort=top",
-            "search/?q=feedback+on+our&restrict_sr=1&t=week&sort=top"
-        ]
-        
-        for sub in subreddits:
-            for base in bases:
-                start_urls.append({"url": f"https://www.reddit.com/r/{sub}/{base}"})
-
-        run_input = {
-            "startUrls": start_urls,
-            "maxItems": 30,
-            "debug": False
-        }
-
-        try:
-            run = await self.client.actor(self.ACTOR_ID).call(run_input=run_input)
-            dataset = self.client.dataset(run["defaultDatasetId"])
-
-            async for item in dataset.iterate_items():
-                title = item.get("title", "")
-                self_text = item.get("body", "")
-                
-                # Basic engagement filter
-                if item.get("upVotes", 0) < 10:
+            for c in children:
+                d = c.get("data", {})
+                if d.get("stickied"):
                     continue
-
-                deal = Deal(
-                    startup_name=f"Reddit Pick: {title[:30]}...",
-                    description=f"{title}\n\n{self_text[:500]}...",
-                    source=DealSource.MANUAL, # TODO: Add REDDIT enum
-                    source_url=item.get("url"),
-                    discovered_at=datetime.utcnow()
+                title = (d.get("title") or "").strip()
+                if not title:
+                    continue
+                external = d.get("url_overridden_by_dest")
+                permalink = f"https://reddit.com{d.get('permalink', '')}"
+                deals.append(
+                    Deal(
+                        startup_name=title[:120],
+                        website=external if external and external.startswith("http") else None,
+                        description=(d.get("selftext") or title)[:600],
+                        source=DealSource.REDDIT,
+                        source_url=permalink,
+                        discovered_at=datetime.utcnow(),
+                    )
                 )
-                deals.append(deal)
-
-        except Exception as e:
-            # Actor specific errors
-            print(f"Error scraping Reddit: {e}")
-
-        return deals
-
-async def source_reddit(limit: int = 20) -> list[Deal]:
-    scraper = RedditScraper()
-    # Could pass limit to scraper.run_search(limit)
-    return await scraper.run_search()
+    return deals

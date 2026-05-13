@@ -1,8 +1,8 @@
-"""Hacker News sourcing — Show HN posts via Algolia.
+"""Hacker News front-page sourcing via Algolia (top points, last 48h).
 
-Loosened from the original (which required points>50 AND num_comments>20 on
-the same day, yielding 0 results most days). Now uses tag-only filter and
-sorts by points descending across the past week.
+Different from `hacker_news.py` (which is Show HN). This pulls broad HN front-page
+items so the pipeline catches launch announcements, fundraising posts, and
+notable open-source projects that aren't tagged Show HN.
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ from src.models import Deal, DealSource
 HN_API = "https://hn.algolia.com/api/v1/search"
 
 
-async def source_hacker_news(limit: int = 20) -> list[Deal]:
-    cutoff = int((datetime.utcnow() - timedelta(days=7)).timestamp())
+async def source_hn_frontpage(limit: int = 30) -> list[Deal]:
+    cutoff = int((datetime.utcnow() - timedelta(days=2)).timestamp())
     params = {
-        "tags": "show_hn",
+        "tags": "front_page",
         "numericFilters": f"created_at_i>{cutoff}",
         "hitsPerPage": limit,
     }
@@ -28,25 +28,24 @@ async def source_hacker_news(limit: int = 20) -> list[Deal]:
         try:
             resp = await client.get(HN_API, params=params)
             resp.raise_for_status()
-            data = resp.json()
+            hits = resp.json().get("hits", [])
         except Exception as e:
-            print(f"Error fetching HN: {e}")
+            print(f"HN front_page fetch failed: {e}")
             return []
 
     deals: list[Deal] = []
-    for hit in data.get("hits", []):
-        title = hit.get("title") or ""
+    for hit in hits:
+        title = (hit.get("title") or "").strip()
+        if not title:
+            continue
         url = hit.get("url")
         oid = hit.get("objectID", "")
-        clean_title = title.replace("Show HN:", "").strip()
-        if not clean_title:
-            continue
         deals.append(
             Deal(
-                startup_name=clean_title,
+                startup_name=title[:120],
                 website=url,
-                description=hit.get("story_text") or clean_title,
-                source=DealSource.HACKER_NEWS,
+                description=hit.get("story_text") or title,
+                source=DealSource.HN_FRONTPAGE,
                 source_url=f"https://news.ycombinator.com/item?id={oid}",
                 discovered_at=datetime.utcnow(),
             )

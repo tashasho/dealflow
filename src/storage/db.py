@@ -25,6 +25,13 @@ class DealDatabase:
     # Schema
     # ------------------------------------------------------------------
 
+    def _migrate(self) -> None:
+        """Add new columns to existing DBs without dropping data."""
+        cols = {row["name"] for row in self._conn.execute("PRAGMA table_info(scored_deals)").fetchall()}
+        if "posted_at" not in cols:
+            self._conn.execute("ALTER TABLE scored_deals ADD COLUMN posted_at TEXT")
+            self._conn.commit()
+
     def _create_tables(self) -> None:
         self._conn.executescript("""
             CREATE TABLE IF NOT EXISTS deals (
@@ -48,7 +55,8 @@ class DealDatabase:
                 strengths_json  TEXT,
                 red_flags_json  TEXT,
                 priority        TEXT NOT NULL,
-                scored_at       TEXT NOT NULL
+                scored_at       TEXT NOT NULL,
+                posted_at       TEXT
             );
 
             CREATE TABLE IF NOT EXISTS digest_history (
@@ -60,6 +68,7 @@ class DealDatabase:
             );
         """)
         self._conn.commit()
+        self._migrate()
 
     # ------------------------------------------------------------------
     # Deals
@@ -159,6 +168,62 @@ class DealDatabase:
     def get_high_priority(self, min_score: int = 75) -> list[ScoredDeal]:
         week_ago = datetime.utcnow() - timedelta(days=7)
         return self.get_scored_deals_since(week_ago, min_score)
+
+    # ------------------------------------------------------------------
+    # Slack-post tracking (cross-run dedup at the *posting* layer)
+    # ------------------------------------------------------------------
+
+    def mark_posted(self, scored_deal_id: int) -> None:
+        """Stamp a scored_deals row as posted to Slack."""
+        self._conn.execute(
+            "UPDATE scored_deals SET posted_at = ? WHERE id = ?",
+            (datetime.utcnow().isoformat(), scored_deal_id),
+        )
+        self._conn.commit()
+
+    def has_been_posted(self, deal: Deal) -> bool:
+        """True if any scored row for this deal has been posted to Slack."""
+        row = self._conn.execute(
+            """SELECT 1 FROM scored_deals sd
+               JOIN deals d ON d.id = sd.deal_id
+               WHERE d.name = ? AND d.source = ? AND sd.posted_at IS NOT NULL
+               LIMIT 1""",
+            (deal.startup_name, deal.source.value),
+        ).fetchone()
+        return row is not None
+
+    def get_top_unposted(self, limit: int = 5, min_score: int = 0) -> list[tuple[int, ScoredDeal]]:
+        """Return top scored deals never posted to Slack, newest first.
+
+        Used as a fallback when today's source pull yields nothing new — keeps
+        the channel useful while guaranteeing no duplicates with past posts.
+        """
+        rows = self._conn.execute(
+            """SELECT sd.id AS sd_id, sd.*, d.raw_json AS deal_json
+               FROM scored_deals sd
+               JOIN deals d ON d.id = sd.deal_id
+               WHERE sd.posted_at IS NULL AND sd.total_score >= ?
+               ORDER BY sd.total_score DESC, sd.scored_at DESC
+               LIMIT ?""",
+            (min_score, limit),
+        ).fetchall()
+
+        results: list[tuple[int, ScoredDeal]] = []
+        for r in rows:
+            deal = Deal.model_validate_json(r["deal_json"])
+            breakdown = ScoreBreakdown.model_validate_json(r["breakdown_json"])
+            scored = ScoredDeal(
+                deal=deal,
+                total_score=r["total_score"],
+                breakdown=breakdown,
+                summary=r["summary"] or "",
+                strengths=json.loads(r["strengths_json"] or "[]"),
+                red_flags=json.loads(r["red_flags_json"] or "[]"),
+                priority=DealPriority(r["priority"]),
+                scored_at=datetime.fromisoformat(r["scored_at"]),
+            )
+            results.append((r["sd_id"], scored))
+        return results
 
     # ------------------------------------------------------------------
     # Digest

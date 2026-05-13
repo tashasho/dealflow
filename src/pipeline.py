@@ -27,8 +27,14 @@ from src.sourcing.arxiv import source_arxiv
 from src.sourcing.linkedin import source_linkedin
 from src.sourcing.twitter import source_twitter
 from src.sourcing.hacker_news import source_hacker_news
+from src.sourcing.hn_frontpage import source_hn_frontpage
 from src.sourcing.reddit import source_reddit
 from src.sourcing.rss import source_rss
+from src.sourcing.indie_hackers import (
+    source_indie_hackers,
+    source_betalist,
+    source_dev_to,
+)
 from src.storage.db import DealDatabase
 
 console = Console()
@@ -44,8 +50,12 @@ SOURCE_MAP = {
     "linkedin": source_linkedin,
     "twitter": source_twitter,
     "hacker_news": source_hacker_news,
+    "hn_frontpage": source_hn_frontpage,
     "reddit": source_reddit,
     "rss": source_rss,
+    "indie_hackers": source_indie_hackers,
+    "betalist": source_betalist,
+    "dev_to": source_dev_to,
 }
 
 
@@ -199,71 +209,91 @@ async def run_pipeline(
 
         # Cross-run dedupe: skip anything already saved in past runs
         before = len(all_deals)
-        all_deals = [d for d in all_deals if not db.has_been_seen(d)]
-        skipped = before - len(all_deals)
+        fresh_deals = [d for d in all_deals if not db.has_been_seen(d)]
+        skipped = before - len(fresh_deals)
         if skipped:
             console.print(f"[dim]  (skipped {skipped} deals already seen in prior runs)[/]")
 
-        if not all_deals:
-            console.print("[yellow]No new deals after cross-run dedup. Done.[/]")
-            return []
-
         # --- 2. ENRICH ---
-        console.print("\n[bold blue]🔍 Enriching deals…[/]")
-        enriched: list[Deal] = []
-        for deal in all_deals:
-            try:
-                deal = await _enrich_deal(deal)
-            except Exception as e:
-                console.print(f"  [yellow]⚠ Enrichment failed for {deal.startup_name}: {e}[/]")
-            enriched.append(deal)
-
-        # --- 3. SCORE ---
-        console.print(f"\n[bold blue]🤖 Scoring {len(enriched)} deals with Gemini…[/]")
         scored: list[ScoredDeal] = []
-        for i, deal in enumerate(enriched, 1):
-            console.print(f"  [{i}/{len(enriched)}] {deal.startup_name}…", end=" ")
-            try:
-                result = await score_deal(deal)
-                scored.append(result)
-                console.print(f"[bold]{result.total_score}/100[/]")
-            except Exception as e:
-                console.print(f"[red]Error: {e}[/]")
+        scored_ids: list[int] = []  # parallel to `scored`, holds scored_deals.id
 
-        # --- 4. FILTER & DISPLAY ---
+        if fresh_deals:
+            console.print("\n[bold blue]🔍 Enriching deals…[/]")
+            enriched: list[Deal] = []
+            for deal in fresh_deals:
+                try:
+                    deal = await _enrich_deal(deal)
+                except Exception as e:
+                    console.print(f"  [yellow]⚠ Enrichment failed for {deal.startup_name}: {e}[/]")
+                enriched.append(deal)
+
+            # --- 3. SCORE ---
+            console.print(f"\n[bold blue]🤖 Scoring {len(enriched)} deals…[/]")
+            for i, deal in enumerate(enriched, 1):
+                console.print(f"  [{i}/{len(enriched)}] {deal.startup_name}…", end=" ")
+                try:
+                    result = await score_deal(deal)
+                    scored.append(result)
+                    console.print(f"[bold]{result.total_score}/100[/]")
+                except Exception as e:
+                    console.print(f"[red]Error: {e}[/]")
+
+            # --- 4. STORE (early so dedup state captures everything we scored) ---
+            console.print(f"\n[bold blue]💾 Storing {len(scored)} scored deals…[/]")
+            for sd in scored:
+                deal_id = db.save_deal(sd.deal)
+                sd_row_id = db.save_scored_deal(deal_id, sd)
+                scored_ids.append(sd_row_id)
+        else:
+            console.print("[yellow]All sourced deals are already in DB.[/]")
+
+        # --- 5. PICK WHAT TO POST ---
         threshold = Config.SCORE_THRESHOLD
-        high_priority = [s for s in scored if s.total_score >= threshold]
-        _print_results_table(scored)
+        # Filter the just-scored to those above threshold AND never posted before
+        # (has_been_seen + immediate save above means we re-query has_been_posted on Deal).
+        to_post: list[tuple[int, ScoredDeal]] = [
+            (sd_id, sd)
+            for sd_id, sd in zip(scored_ids, scored)
+            if sd.total_score >= threshold and not db.has_been_posted(sd.deal)
+        ]
 
-        console.print(
-            f"\n[bold green]✅ {len(high_priority)} deals passed threshold "
-            f"(≥{threshold})[/] of {len(scored)} scored"
-        )
+        if scored:
+            _print_results_table(scored)
+            console.print(
+                f"\n[bold green]✅ {len(to_post)} deals passed threshold "
+                f"(≥{threshold}) and are unposted[/] of {len(scored)} scored"
+            )
 
-        # --- 5. NOTIFY ---
-        if high_priority and not dry_run:
-            console.print(f"\n[bold blue]📢 Posting {len(high_priority)} deals to Slack…[/]")
-            for sd in high_priority:
+        # Fallback — if nothing fresh meets the bar, surface top unposted from past runs
+        if not to_post:
+            console.print(
+                "\n[yellow]No fresh picks today — pulling top unposted from past runs[/]"
+            )
+            backfill_n = max(3, Config.SCORE_THRESHOLD // 10)  # ~3-8 items
+            to_post = db.get_top_unposted(limit=backfill_n, min_score=0)
+            if not to_post:
+                console.print("[dim]Nothing in the backlog either. Channel stays quiet today.[/]")
+
+        # --- 6. NOTIFY ---
+        if to_post and not dry_run:
+            console.print(f"\n[bold blue]📢 Posting {len(to_post)} deals to Slack…[/]")
+            for sd_id, sd in to_post:
                 try:
                     await post_deal_to_slack(sd, dry_run=dry_run)
+                    db.mark_posted(sd_id)
                     console.print(f"  ✓ {sd.deal.startup_name}")
                 except Exception as e:
                     console.print(f"  [red]✗ {sd.deal.startup_name}: {e}[/]")
-        elif high_priority and dry_run:
+        elif to_post and dry_run:
             console.print("\n[bold yellow]🏃 Dry run — Slack messages:[/]")
-            for sd in high_priority:
+            for _sd_id, sd in to_post:
                 text = await post_deal_to_slack(sd, dry_run=True)
                 console.print(f"\n{'─' * 60}")
                 console.print(text)
 
-        # --- 6. STORE ---
-        console.print(f"\n[bold blue]💾 Storing {len(scored)} scored deals…[/]")
-        for sd in scored:
-            deal_id = db.save_deal(sd.deal)
-            db.save_scored_deal(deal_id, sd)
-
-        # Sync to Airtable
-        if not dry_run:
+        # Sync to Airtable (only if scored anything new this run)
+        if scored and not dry_run:
             console.print(f"  → Syncing to Airtable…")
             await sync_to_airtable(scored)
 

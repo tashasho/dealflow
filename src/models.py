@@ -22,7 +22,11 @@ class DealSource(str, Enum):
     LINKEDIN = "linkedin"
     TWITTER = "twitter"
     HACKER_NEWS = "hacker_news"
+    HN_FRONTPAGE = "hn_frontpage"
     REDDIT = "reddit"
+    INDIE_HACKERS = "indie_hackers"
+    BETALIST = "betalist"
+    DEV_TO = "dev_to"
     RSS = "rss"
     MANUAL = "manual"
 
