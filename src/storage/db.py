@@ -65,6 +65,17 @@ class DealDatabase:
     # Deals
     # ------------------------------------------------------------------
 
+    def has_been_seen(self, deal: Deal) -> bool:
+        """True if a deal with the same (name, source) was already saved.
+
+        Pipeline uses this to skip re-scoring + re-posting items from past runs.
+        """
+        row = self._conn.execute(
+            "SELECT 1 FROM deals WHERE name = ? AND source = ? LIMIT 1",
+            (deal.startup_name, deal.source.value),
+        ).fetchone()
+        return row is not None
+
     def save_deal(self, deal: Deal) -> int:
         """Insert a deal, returning its row id. Skips duplicates."""
         try:

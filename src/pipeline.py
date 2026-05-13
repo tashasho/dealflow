@@ -193,12 +193,19 @@ async def run_pipeline(
             except Exception as e:
                 console.print(f"[red]Error: {e}[/]")
 
-        # Deduplicate
+        # In-batch dedupe (same name appearing in multiple sources this run)
         all_deals = await _deduplicate(all_deals)
-        console.print(f"\n[bold]📋 {len(all_deals)} unique deals after dedup[/]")
+        console.print(f"\n[bold]📋 {len(all_deals)} unique deals after intra-batch dedup[/]")
+
+        # Cross-run dedupe: skip anything already saved in past runs
+        before = len(all_deals)
+        all_deals = [d for d in all_deals if not db.has_been_seen(d)]
+        skipped = before - len(all_deals)
+        if skipped:
+            console.print(f"[dim]  (skipped {skipped} deals already seen in prior runs)[/]")
 
         if not all_deals:
-            console.print("[yellow]No deals found. Try different sources.[/]")
+            console.print("[yellow]No new deals after cross-run dedup. Done.[/]")
             return []
 
         # --- 2. ENRICH ---
